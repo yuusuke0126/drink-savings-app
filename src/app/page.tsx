@@ -73,6 +73,8 @@ export default function Home() {
   const [householdIdInput, setHouseholdIdInput] = useState("");
   const [householdId, setHouseholdId] = useState("");
   const [isHouseholdSettingsOpen, setIsHouseholdSettingsOpen] = useState(false);
+  const [dayOffset, setDayOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
   const [message, setMessage] = useState(
     supabase
       ? ""
@@ -144,14 +146,19 @@ export default function Home() {
   }, [supabase, user]);
 
   const userStats = useMemo(() => {
-    const now = new Date();
-    const map = new Map<string, { today: number; month: number }>();
+    const todayTarget = new Date();
+    todayTarget.setDate(todayTarget.getDate() + dayOffset);
+
+    const monthTarget = new Date();
+    monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
+
+    const map = new Map<string, { day: number; month: number }>();
 
     for (const log of logs) {
-      const stat = map.get(log.user_id) ?? { today: 0, month: 0 };
+      const stat = map.get(log.user_id) ?? { day: 0, month: 0 };
       const createdAt = new Date(log.created_at);
-      if (isSameDateInLocal(createdAt, now)) stat.today += 1;
-      if (isSameMonthInLocal(createdAt, now)) stat.month += 1;
+      if (isSameDateInLocal(createdAt, todayTarget)) stat.day += 1;
+      if (isSameMonthInLocal(createdAt, monthTarget)) stat.month += 1;
       map.set(log.user_id, stat);
     }
 
@@ -161,7 +168,19 @@ export default function Home() {
       if (b === user.id) return 1;
       return a.localeCompare(b);
     });
-  }, [logs, user]);
+  }, [dayOffset, logs, monthOffset, user]);
+
+  const dayLabel = useMemo(() => {
+    const target = new Date();
+    target.setDate(target.getDate() + dayOffset);
+    return target.toLocaleDateString("ja-JP");
+  }, [dayOffset]);
+
+  const monthLabel = useMemo(() => {
+    const target = new Date();
+    target.setMonth(target.getMonth() + monthOffset);
+    return `${target.getFullYear()}年${target.getMonth() + 1}月`;
+  }, [monthOffset]);
 
   const handleSignIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -408,6 +427,7 @@ export default function Home() {
                       setIsOtherInputOpen((prev) => !prev);
                       return;
                     }
+                    setIsOtherInputOpen(false);
                     void handleAddDrink(drink.key);
                   }}
                   disabled={isSubmitting || !householdId}
@@ -415,7 +435,7 @@ export default function Home() {
                     isOtherInputOpen && drink.key === "other"
                       ? "border-blue-600 bg-blue-50"
                       : "border-gray-300"
-                  } disabled:opacity-50`}
+                  } transition active:scale-95 active:bg-blue-100 disabled:opacity-50`}
                 >
                   {drink.label}
                 </button>
@@ -442,6 +462,44 @@ export default function Home() {
 
           <section className="rounded border p-4">
             <h2 className="mb-3 font-semibold">集計（人別）</h2>
+            <div className="mb-3 rounded border border-gray-200 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold">今日の飲酒量</h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <button
+                    onClick={() => setDayOffset((prev) => prev - 1)}
+                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                  >
+                    ←
+                  </button>
+                  <span>{dayLabel}</span>
+                  <button
+                    onClick={() => setDayOffset((prev) => prev + 1)}
+                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold">今月の飲酒量</h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <button
+                    onClick={() => setMonthOffset((prev) => prev - 1)}
+                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                  >
+                    ←
+                  </button>
+                  <span>{monthLabel}</span>
+                  <button
+                    onClick={() => setMonthOffset((prev) => prev + 1)}
+                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+            </div>
             <div className="space-y-2">
               {userStats.length === 0 && (
                 <p className="text-sm text-gray-600">まだ記録がありません。</p>
@@ -452,8 +510,8 @@ export default function Home() {
                     {formatUserLabel(userId, user?.id)}
                   </p>
                   <p className="text-sm text-gray-700">
-                    今日: {stat.today}杯 / ¥
-                    {(stat.today * SAVINGS_PER_DRINK).toLocaleString()}
+                    今日: {stat.day}杯 / ¥
+                    {(stat.day * SAVINGS_PER_DRINK).toLocaleString()}
                   </p>
                   <p className="text-sm text-gray-700">
                     今月: {stat.month}杯 / ¥
