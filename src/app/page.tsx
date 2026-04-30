@@ -55,11 +55,6 @@ function formatDrinkLabel(log: DrinkLog) {
   return found?.label ?? log.drink_type;
 }
 
-function formatUserLabel(logUserId: string, currentUserId?: string) {
-  if (currentUserId && logUserId === currentUserId) return "自分";
-  return `共有メンバー (${logUserId.slice(0, 8)})`;
-}
-
 export default function Home() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
@@ -173,7 +168,12 @@ export default function Home() {
   const dayLabel = useMemo(() => {
     const target = new Date();
     target.setDate(target.getDate() + dayOffset);
-    return target.toLocaleDateString("ja-JP");
+    return target.toLocaleDateString("ja-JP", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    });
   }, [dayOffset]);
 
   const monthLabel = useMemo(() => {
@@ -181,6 +181,33 @@ export default function Home() {
     target.setMonth(target.getMonth() + monthOffset);
     return `${target.getFullYear()}年${target.getMonth() + 1}月`;
   }, [monthOffset]);
+
+  const summaryStats = useMemo(() => {
+    let selfDay = 0;
+    let selfMonth = 0;
+    let sharedDay = 0;
+    let sharedMonth = 0;
+
+    for (const [userId, stat] of userStats) {
+      if (userId === user?.id) {
+        selfDay += stat.day;
+        selfMonth += stat.month;
+      } else {
+        sharedDay += stat.day;
+        sharedMonth += stat.month;
+      }
+    }
+
+    return {
+      selfDay,
+      selfMonth,
+      sharedDay,
+      sharedMonth,
+    };
+  }, [user?.id, userStats]);
+
+  const isDayNextDisabled = dayOffset >= 0;
+  const isMonthNextDisabled = monthOffset >= 0;
 
   const handleSignIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -460,66 +487,102 @@ export default function Home() {
             )}
           </section>
 
-          <section className="rounded border p-4">
-            <h2 className="mb-3 font-semibold">集計（人別）</h2>
-            <div className="mb-3 rounded border border-gray-200 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">今日の飲酒量</h3>
+          <section className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm">
+            <h2 className="mb-4 font-semibold text-slate-800">集計（人別）</h2>
+
+            <div className="mb-4 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-blue-700">日付の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setDayOffset((prev) => prev - 1)}
-                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95"
                   >
                     ←
                   </button>
-                  <span>{dayLabel}</span>
+                  <span className="font-medium text-slate-700">{dayLabel}</span>
                   <button
-                    onClick={() => setDayOffset((prev) => prev + 1)}
-                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                    onClick={() => {
+                      if (isDayNextDisabled) return;
+                      setDayOffset((prev) => prev + 1);
+                    }}
+                    disabled={isDayNextDisabled}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     →
                   </button>
                 </div>
               </div>
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">今月の飲酒量</h3>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                  <p className="text-xs font-semibold text-blue-700">自分</p>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {summaryStats.selfDay}杯
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    ¥{(summaryStats.selfDay * SAVINGS_PER_DRINK).toLocaleString()}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-600">共有メンバー</p>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {summaryStats.sharedDay}杯
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    ¥{(summaryStats.sharedDay * SAVINGS_PER_DRINK).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-indigo-100 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-indigo-700">月の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setMonthOffset((prev) => prev - 1)}
-                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95"
                   >
                     ←
                   </button>
-                  <span>{monthLabel}</span>
+                  <span className="font-medium text-slate-700">{monthLabel}</span>
                   <button
-                    onClick={() => setMonthOffset((prev) => prev + 1)}
-                    className="rounded border px-2 py-0.5 transition active:scale-95"
+                    onClick={() => {
+                      if (isMonthNextDisabled) return;
+                      setMonthOffset((prev) => prev + 1);
+                    }}
+                    disabled={isMonthNextDisabled}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     →
                   </button>
                 </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              {userStats.length === 0 && (
-                <p className="text-sm text-gray-600">まだ記録がありません。</p>
-              )}
-              {userStats.map(([userId, stat]) => (
-                <div key={userId} className="rounded border border-gray-200 p-3">
-                  <p className="mb-1 text-sm font-semibold">
-                    {formatUserLabel(userId, user?.id)}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                  <p className="text-xs font-semibold text-indigo-700">自分</p>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {summaryStats.selfMonth}杯
                   </p>
-                  <p className="text-sm text-gray-700">
-                    今日: {stat.day}杯 / ¥
-                    {(stat.day * SAVINGS_PER_DRINK).toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    今月: {stat.month}杯 / ¥
-                    {(stat.month * SAVINGS_PER_DRINK).toLocaleString()}
+                  <p className="text-sm text-slate-600">
+                    ¥{(summaryStats.selfMonth * SAVINGS_PER_DRINK).toLocaleString()}
                   </p>
                 </div>
-              ))}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-600">共有メンバー</p>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {summaryStats.sharedMonth}杯
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    ¥{(summaryStats.sharedMonth * SAVINGS_PER_DRINK).toLocaleString()}
+                  </p>
+                </div>
+              </div>
             </div>
+
+            {userStats.length === 0 && (
+              <p className="mt-3 text-sm text-gray-600">まだ記録がありません。</p>
+            )}
           </section>
 
           <section className="rounded border p-4">
