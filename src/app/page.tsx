@@ -514,23 +514,6 @@ export default function Home() {
             </div>
 
             <h2 className="mb-3 font-semibold">1杯記録</h2>
-            <div className="mb-3 flex flex-col gap-2 rounded border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center">
-              <label className="text-sm font-medium text-slate-700">表示名</label>
-              <input
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="1〜20文字で入力"
-                maxLength={20}
-                value={displayNameInput}
-                onChange={(e) => setDisplayNameInput(e.target.value)}
-              />
-              <button
-                onClick={handleSaveDisplayName}
-                disabled={isSubmitting}
-                className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-              >
-                名前を保存
-              </button>
-            </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DRINKS.map((drink) => (
                 <button
@@ -698,7 +681,7 @@ export default function Home() {
 
           <section className="rounded border p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">共有グループ設定</h2>
+              <h2 className="text-sm font-semibold">設定</h2>
               <button
                 onClick={() =>
                   setIsHouseholdSettingsOpen((previous) => !previous)
@@ -708,27 +691,56 @@ export default function Home() {
                 {isHouseholdSettingsOpen ? "設定を閉じる" : "設定を開く"}
               </button>
             </div>
-            <p className="mb-2 text-xs text-gray-600">
-              household_id は通常1度設定すれば再入力不要です。必要なときだけ変更してください。
-            </p>
             {isHouseholdSettingsOpen ? (
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  placeholder="例: 8f2b... (uuid)"
-                  value={householdIdInput}
-                  onChange={(e) => setHouseholdIdInput(e.target.value)}
-                />
-                <button
-                  onClick={handleSaveHouseholdId}
-                  disabled={isSubmitting}
-                  className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-                >
-                  保存
-                </button>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="mb-1 text-xs text-gray-600">
+                    表示名（1〜20文字）を設定します。
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      className="w-full rounded border px-3 py-2 text-sm"
+                      placeholder="例: たろう"
+                      maxLength={20}
+                      value={displayNameInput}
+                      onChange={(e) => setDisplayNameInput(e.target.value)}
+                    />
+                    <button
+                      onClick={handleSaveDisplayName}
+                      disabled={isSubmitting}
+                      className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      名前を保存
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-xs text-gray-600">
+                    household_id は通常1度設定すれば再入力不要です。必要なときだけ変更してください。
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      className="w-full rounded border px-3 py-2 text-sm"
+                      placeholder="例: 8f2b... (uuid)"
+                      value={householdIdInput}
+                      onChange={(e) => setHouseholdIdInput(e.target.value)}
+                    />
+                    <button
+                      onClick={handleSaveHouseholdId}
+                      disabled={isSubmitting}
+                      className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
-              <p className="text-xs text-gray-600">現在の household_id: {householdId || "(未設定)"}</p>
+              <div className="space-y-1 text-xs text-gray-600">
+                <p>現在の表示名: {displayNameInput.trim() || "(未設定)"}</p>
+                <p>現在の household_id: {householdId || "(未設定)"}</p>
+              </div>
             )}
           </section>
         </>

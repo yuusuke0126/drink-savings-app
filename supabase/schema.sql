@@ -89,10 +89,10 @@ using (
   exists (
     select 1
     from public.household_members hm_self
-    join public.household_members hm_target
-      on hm_self.household_id = hm_target.household_id
+    join public.drink_logs dl
+      on dl.household_id = hm_self.household_id
     where hm_self.user_id = auth.uid()
-      and hm_target.user_id = user_profiles.user_id
+      and dl.user_id = user_profiles.user_id
   )
 );
 
