@@ -39,6 +39,12 @@ const DRINKS: { key: DrinkType; label: string }[] = [
 
 const SAVINGS_PER_DRINK = 500;
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+const SECTION_CARD_CLASS =
+  "rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/40";
+const OUTLINE_BUTTON_CLASS =
+  "rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
+const CHIP_BUTTON_CLASS =
+  "rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
 
 function isSameDateInLocal(date: Date, target: Date) {
   return (
@@ -156,7 +162,7 @@ export default function Home() {
         .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
         .eq("household_id", householdId)
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(10);
 
       if (error) {
         setMessage(`履歴取得エラー: ${error.message}`);
@@ -629,9 +635,20 @@ export default function Home() {
     return <main className="p-6">読み込み中...</main>;
   }
 
+  const displayNameText = displayNameInput.trim();
+  const currentUserLabel = displayNameText || user?.email || "";
+  const shouldUseHonorific = Boolean(displayNameText);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
-      <h1 className="text-2xl font-bold">飲酒記録アプリ</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">飲酒記録アプリ</h1>
+        {currentUserLabel && (
+          <p className="text-xs text-slate-500">
+            {shouldUseHonorific ? `${currentUserLabel}さん` : currentUserLabel}
+          </p>
+        )}
+      </div>
 
       {!supabase && (
         <section className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -644,7 +661,7 @@ export default function Home() {
       )}
 
       {!user ? (
-        <section className="rounded border p-4">
+        <section className={SECTION_CARD_CLASS}>
           <h2 className="mb-3 font-semibold">ログイン</h2>
           <form className="flex flex-col gap-3" onSubmit={handleSignIn}>
             <input
@@ -652,14 +669,14 @@ export default function Home() {
               placeholder="メールアドレス"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="rounded border px-3 py-2"
+              className={OUTLINE_BUTTON_CLASS}
             />
             <input
               type="password"
               placeholder="パスワード"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="rounded border px-3 py-2"
+              className={OUTLINE_BUTTON_CLASS}
             />
             <div className="flex gap-2">
               <button
@@ -673,7 +690,7 @@ export default function Home() {
                 type="button"
                 disabled={isSubmitting || !supabase}
                 onClick={handleSignUp}
-                className="rounded border px-3 py-2 disabled:opacity-50"
+                className={OUTLINE_BUTTON_CLASS}
               >
                 新規登録
               </button>
@@ -682,17 +699,7 @@ export default function Home() {
         </section>
       ) : (
         <>
-          <section className="rounded border p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm text-gray-600">{user.email}</p>
-              <button
-                onClick={handleSignOut}
-                className="rounded border px-3 py-1 text-sm"
-              >
-                ログアウト
-              </button>
-            </div>
-
+          <section className={SECTION_CARD_CLASS}>
             <h2 className="mb-3 font-semibold">飲酒記録</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DRINKS.map((drink) => (
@@ -711,7 +718,7 @@ export default function Home() {
                     isOtherInputOpen && drink.key === "other"
                       ? "border-blue-600 bg-blue-50"
                       : "border-gray-300"
-                  } transition active:scale-95 active:bg-blue-100 disabled:opacity-50`}
+                  } transition active:scale-95 active:bg-blue-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:active:bg-slate-700`}
                 >
                   {drink.label}
                 </button>
@@ -736,20 +743,20 @@ export default function Home() {
             )}
           </section>
 
-          <section className="rounded border border-slate-200 bg-slate-50/70 p-4">
+          <section className={SECTION_CARD_CLASS}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold text-slate-800">集計（人別）</h2>
               <Link
                 href="/analytics"
-                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
+                className={CHIP_BUTTON_CLASS}
               >
                 集計詳細
               </Link>
             </div>
 
-            <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50 p-3">
+            <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/40 dark:bg-blue-900/20">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-blue-700">日付の飲酒量</h3>
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">日付の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setDayOffset((prev) => prev - 1)}
@@ -757,11 +764,11 @@ export default function Home() {
                   >
                     ←
                   </button>
-                  <span className="font-medium text-slate-700">{dayLabel}</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{dayLabel}</span>
                   <button
                     onClick={() => setDayOffset(0)}
                     disabled={isDayResetDisabled}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     今日
                   </button>
@@ -781,7 +788,7 @@ export default function Home() {
                 {userStats.map(([memberUserId, stat]) => (
                   <div
                     key={`day-${memberUserId}`}
-                    className="rounded-lg border border-blue-100 bg-blue-50 p-3"
+                    className="rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60"
                   >
                     <p className="text-xs font-semibold text-blue-700">
                       {formatMemberName(memberUserId)}
@@ -795,9 +802,9 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-indigo-100 bg-slate-50 p-3">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/20">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-indigo-700">月の飲酒量</h3>
+                <h3 className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">月の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setMonthOffset((prev) => prev - 1)}
@@ -805,11 +812,11 @@ export default function Home() {
                   >
                     ←
                   </button>
-                  <span className="font-medium text-slate-700">{monthLabel}</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{monthLabel}</span>
                   <button
                     onClick={() => setMonthOffset(0)}
                     disabled={isMonthResetDisabled}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     今月
                   </button>
@@ -829,7 +836,7 @@ export default function Home() {
                 {userStats.map(([memberUserId, stat]) => (
                   <div
                     key={`month-${memberUserId}`}
-                    className="rounded-lg border border-indigo-100 bg-indigo-50 p-3"
+                    className="rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60"
                   >
                     <p className="text-xs font-semibold text-indigo-700">
                       {formatMemberName(memberUserId)}
@@ -848,7 +855,7 @@ export default function Home() {
             )}
           </section>
 
-          <section className="rounded border border-slate-200 bg-slate-50/70 p-4">
+          <section className={SECTION_CARD_CLASS}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-slate-800">カレンダー</h2>
               <div className="flex items-center gap-2 text-sm">
@@ -858,7 +865,7 @@ export default function Home() {
                 >
                   ←
                 </button>
-                <span className="font-medium text-slate-700">{calendarMonthLabel}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">{calendarMonthLabel}</span>
                 <button
                   onClick={() => setCalendarMonthOffset((prev) => prev + 1)}
                   className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
@@ -868,14 +875,14 @@ export default function Home() {
                 <button
                   onClick={() => setCalendarMonthOffset(0)}
                   disabled={calendarMonthOffset === 0}
-                  className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   今月
                 </button>
               </div>
             </div>
 
-            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-600">
+            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-600 dark:text-slate-300">
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label} className="py-1 font-medium">
                   {label}
@@ -897,10 +904,10 @@ export default function Home() {
                     className={`h-12 rounded-md border text-xs transition ${
                       isSelected
                         ? "border-blue-500 bg-blue-50"
-                        : "border-slate-200 bg-white hover:bg-slate-100"
+                        : "border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
                     }`}
                   >
-                    <div className="text-slate-700">{day}</div>
+                    <div className="text-slate-700 dark:text-slate-200">{day}</div>
                     <div className="mt-1 flex items-center justify-center gap-1">
                       {marker?.self && <span className="h-2 w-2 rounded-full bg-red-500" />}
                       {marker?.other && <span className="h-2 w-2 rounded-full bg-blue-500" />}
@@ -910,8 +917,8 @@ export default function Home() {
               })}
             </div>
 
-            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-              <p className="mb-2 text-sm font-semibold text-slate-700">
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                 {activeCalendarDateKey} のサマリー
               </p>
               {selectedDayStats.length === 0 ? (
@@ -921,7 +928,7 @@ export default function Home() {
                   {selectedDayStats.map(([memberUserId, count]) => (
                     <div
                       key={`calendar-summary-${memberUserId}`}
-                      className="rounded border border-slate-200 bg-slate-50 p-2"
+                      className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800"
                     >
                       <p className="text-xs font-semibold text-slate-700">
                         {formatMemberName(memberUserId)}
@@ -937,12 +944,12 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="rounded border p-4">
+          <section className={SECTION_CARD_CLASS}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">履歴</h2>
               <Link
                 href="/history"
-                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
+                className={CHIP_BUTTON_CLASS}
               >
                 すべての履歴を見る
               </Link>
@@ -974,20 +981,37 @@ export default function Home() {
             </ul>
           </section>
 
-          <section className="rounded border p-4">
+          <section className={SECTION_CARD_CLASS}>
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-semibold">設定</h2>
               <button
                 onClick={() =>
                   setIsHouseholdSettingsOpen((previous) => !previous)
                 }
-                className="rounded border px-2 py-1 text-xs"
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
               >
                 {isHouseholdSettingsOpen ? "設定を閉じる" : "設定を開く"}
               </button>
             </div>
             {isHouseholdSettingsOpen ? (
               <div className="flex flex-col gap-3">
+                <div>
+                  <p className="mb-1 text-xs text-gray-600">
+                    アカウント
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-700">
+                      {displayNameInput.trim() || user.email || "(未設定)"}
+                    </p>
+                    <button
+                      onClick={handleSignOut}
+                      className={OUTLINE_BUTTON_CLASS}
+                    >
+                      ログアウト
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <p className="mb-1 text-xs text-gray-600">
                     表示名（1〜20文字）を設定します。
@@ -1003,7 +1027,7 @@ export default function Home() {
                     <button
                       onClick={handleSaveDisplayName}
                       disabled={isSubmitting}
-                      className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                      className={OUTLINE_BUTTON_CLASS}
                     >
                       名前を保存
                     </button>
@@ -1024,7 +1048,7 @@ export default function Home() {
                     <button
                       onClick={handleSaveHouseholdId}
                       disabled={isSubmitting}
-                      className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                      className={OUTLINE_BUTTON_CLASS}
                     >
                       保存
                     </button>
