@@ -44,18 +44,28 @@ alter table public.household_members enable row level security;
 alter table public.drink_logs enable row level security;
 alter table public.user_profiles enable row level security;
 
+create or replace function public.is_household_member(target_household_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.household_members hm
+    where hm.household_id = target_household_id
+      and hm.user_id = auth.uid()
+  );
+$$;
+
+revoke all on function public.is_household_member(uuid) from public;
+grant execute on function public.is_household_member(uuid) to authenticated;
+
 drop policy if exists "households_select_member" on public.households;
 create policy "households_select_member"
 on public.households
 for select
-using (
-  exists (
-    select 1
-    from public.household_members hm
-    where hm.household_id = households.id
-      and hm.user_id = auth.uid()
-  )
-);
+using (public.is_household_member(households.id));
 
 drop policy if exists "households_insert_auth" on public.households;
 create policy "households_insert_auth"
@@ -73,14 +83,7 @@ drop policy if exists "household_members_select_same_household" on public.househ
 create policy "household_members_select_same_household"
 on public.household_members
 for select
-using (
-  exists (
-    select 1
-    from public.household_members hm_self
-    where hm_self.household_id = household_members.household_id
-      and hm_self.user_id = auth.uid()
-  )
-);
+using (public.is_household_member(household_members.household_id));
 
 drop policy if exists "household_members_insert_self" on public.household_members;
 create policy "household_members_insert_self"
@@ -101,10 +104,8 @@ for select
 using (
   exists (
     select 1
-    from public.household_members hm_self
-    join public.drink_logs dl
-      on dl.household_id = hm_self.household_id
-    where hm_self.user_id = auth.uid()
+    from public.drink_logs dl
+    where public.is_household_member(dl.household_id)
       and dl.user_id = user_profiles.user_id
   )
 );
@@ -126,14 +127,7 @@ drop policy if exists "drink_logs_select_household" on public.drink_logs;
 create policy "drink_logs_select_household"
 on public.drink_logs
 for select
-using (
-  exists (
-    select 1
-    from public.household_members hm
-    where hm.household_id = drink_logs.household_id
-      and hm.user_id = auth.uid()
-  )
-);
+using (public.is_household_member(drink_logs.household_id));
 
 drop policy if exists "drink_logs_insert_household" on public.drink_logs;
 create policy "drink_logs_insert_household"
@@ -141,12 +135,7 @@ on public.drink_logs
 for insert
 with check (
   user_id = auth.uid()
-  and exists (
-    select 1
-    from public.household_members hm
-    where hm.household_id = drink_logs.household_id
-      and hm.user_id = auth.uid()
-  )
+  and public.is_household_member(drink_logs.household_id)
 );
 
 drop policy if exists "drink_logs_delete_own" on public.drink_logs;

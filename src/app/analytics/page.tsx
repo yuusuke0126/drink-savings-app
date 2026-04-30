@@ -21,6 +21,10 @@ type UserProfile = {
 
 const SAVINGS_PER_DRINK = 500;
 
+function isErrorMessage(text: string) {
+  return text.includes("失敗") || text.includes("エラー");
+}
+
 function getDrinkEmoji(drinkType: string) {
   switch (drinkType) {
     case "beer":
@@ -166,6 +170,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     if (!message) return;
+    if (isErrorMessage(message)) return;
     const timeoutId = window.setTimeout(() => {
       setMessage("");
     }, 2800);
@@ -316,15 +321,39 @@ export default function AnalyticsPage() {
 
       {message && (
         <div className="pointer-events-none fixed left-1/2 top-4 z-50 w-[92%] max-w-md -translate-x-1/2">
-          <p
+          <div
             className={`rounded-xl border p-3 text-sm shadow-lg backdrop-blur-sm transition-opacity ${
-              message.includes("失敗") || message.includes("エラー")
+              isErrorMessage(message)
                 ? "border-red-200 bg-red-50 text-red-800"
                 : "border-emerald-200 bg-emerald-50 text-emerald-800"
-            }`}
+            } pointer-events-auto`}
           >
-            {message}
-          </p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="select-text whitespace-pre-wrap break-words">{message}</p>
+              {isErrorMessage(message) && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(message);
+                      } catch {
+                        // no-op
+                      }
+                    }}
+                    className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700"
+                  >
+                    コピー
+                  </button>
+                  <button
+                    onClick={() => setMessage("")}
+                    className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700"
+                  >
+                    閉じる
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </main>
