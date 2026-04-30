@@ -68,7 +68,7 @@ export default function Home() {
   const [logs, setLogs] = useState<DrinkLog[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedDrink, setSelectedDrink] = useState<DrinkType | null>(null);
+  const [isOtherInputOpen, setIsOtherInputOpen] = useState(false);
   const [otherDrinkName, setOtherDrinkName] = useState("");
   const [householdIdInput, setHouseholdIdInput] = useState("");
   const [householdId, setHouseholdId] = useState("");
@@ -191,13 +191,16 @@ export default function Home() {
     setIsSubmitting(false);
   };
 
-  const handleAddDrink = async () => {
-    if (!supabase || !selectedDrink || !user) return;
+  const handleAddDrink = async (
+    drinkType: DrinkType,
+    customDrinkName?: string,
+  ) => {
+    if (!supabase || !user) return;
     if (!householdId) {
       setMessage("先に household_id を設定してください。");
       return;
     }
-    if (selectedDrink === "other" && !otherDrinkName.trim()) {
+    if (drinkType === "other" && !customDrinkName?.trim()) {
       setMessage("その他を選択した場合は飲み物名を入力してください。");
       return;
     }
@@ -208,9 +211,9 @@ export default function Home() {
     const payload = {
       user_id: user.id,
       household_id: householdId,
-      drink_type: selectedDrink,
+      drink_type: drinkType,
       custom_drink_name:
-        selectedDrink === "other" ? otherDrinkName.trim() : null,
+        drinkType === "other" ? customDrinkName?.trim() ?? null : null,
     };
 
     const { data, error } = await supabase
@@ -224,8 +227,10 @@ export default function Home() {
     } else if (data) {
       setLogs((current) => [data as DrinkLog, ...current]);
       setMessage("1杯を記録しました。");
-      setSelectedDrink(null);
-      setOtherDrinkName("");
+      if (drinkType === "other") {
+        setOtherDrinkName("");
+        setIsOtherInputOpen(false);
+      }
     }
     setIsSubmitting(false);
   };
@@ -417,32 +422,41 @@ export default function Home() {
               {DRINKS.map((drink) => (
                 <button
                   key={drink.key}
-                  onClick={() => setSelectedDrink(drink.key)}
+                  onClick={() => {
+                    if (drink.key === "other") {
+                      setIsOtherInputOpen((prev) => !prev);
+                      return;
+                    }
+                    void handleAddDrink(drink.key);
+                  }}
+                  disabled={isSubmitting || !householdId}
                   className={`rounded border px-3 py-2 text-sm ${
-                    selectedDrink === drink.key
+                    isOtherInputOpen && drink.key === "other"
                       ? "border-blue-600 bg-blue-50"
                       : "border-gray-300"
-                  }`}
+                  } disabled:opacity-50`}
                 >
                   {drink.label}
                 </button>
               ))}
             </div>
-            {selectedDrink === "other" && (
-              <input
-                className="mt-3 w-full rounded border px-3 py-2"
-                placeholder="飲み物名を入力"
-                value={otherDrinkName}
-                onChange={(e) => setOtherDrinkName(e.target.value)}
-              />
+            {isOtherInputOpen && (
+              <div className="mt-3 flex gap-2">
+                <input
+                  className="w-full rounded border px-3 py-2"
+                  placeholder="飲み物名を入力"
+                  value={otherDrinkName}
+                  onChange={(e) => setOtherDrinkName(e.target.value)}
+                />
+                <button
+                  onClick={() => void handleAddDrink("other", otherDrinkName)}
+                  disabled={isSubmitting || !householdId}
+                  className="rounded bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                >
+                  記録
+                </button>
+              </div>
             )}
-            <button
-              onClick={handleAddDrink}
-              disabled={isSubmitting || !selectedDrink || !householdId}
-              className="mt-3 rounded bg-green-600 px-4 py-2 text-white disabled:opacity-50"
-            >
-              追加する（1杯）
-            </button>
           </section>
 
           <section className="rounded border p-4">
