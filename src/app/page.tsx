@@ -173,7 +173,7 @@ export default function Home() {
   };
 
   const handleAddDrink = async () => {
-    if (!supabase || !selectedDrink) return;
+    if (!supabase || !selectedDrink || !user) return;
     if (!householdId) {
       setMessage("先に household_id を設定してください。");
       return;
