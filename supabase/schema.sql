@@ -69,6 +69,19 @@ on public.household_members
 for select
 using (user_id = auth.uid());
 
+drop policy if exists "household_members_select_same_household" on public.household_members;
+create policy "household_members_select_same_household"
+on public.household_members
+for select
+using (
+  exists (
+    select 1
+    from public.household_members hm_self
+    where hm_self.household_id = household_members.household_id
+      and hm_self.user_id = auth.uid()
+  )
+);
+
 drop policy if exists "household_members_insert_self" on public.household_members;
 create policy "household_members_insert_self"
 on public.household_members

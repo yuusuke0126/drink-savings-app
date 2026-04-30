@@ -381,7 +381,9 @@ export default function Home() {
   );
 
   const sortedMemberIds = useMemo(() => {
-    const ids = Array.from(new Set(householdMemberIds));
+    const ids = Array.from(
+      new Set([...householdMemberIds, ...calendarLogs.map((log) => log.user_id)]),
+    );
     if (user?.id && !ids.includes(user.id)) ids.push(user.id);
     return ids.sort((a, b) => {
       if (!user) return a.localeCompare(b);
@@ -389,7 +391,7 @@ export default function Home() {
       if (b === user.id) return 1;
       return a.localeCompare(b);
     });
-  }, [householdMemberIds, user]);
+  }, [calendarLogs, householdMemberIds, user]);
 
   const memberColorMap = useMemo(() => {
     const colorMap = new Map<string, string>();
