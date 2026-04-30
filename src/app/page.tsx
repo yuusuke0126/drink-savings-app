@@ -36,6 +36,9 @@ const DRINKS: { key: DrinkType; label: string }[] = [
   { key: "shochu", label: "焼酎" },
   { key: "other", label: "その他" },
 ];
+const DRINK_ORDER = new Map<DrinkType, number>(
+  DRINKS.map((drink, index) => [drink.key, index]),
+);
 
 const SAVINGS_PER_DRINK = 500;
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -116,6 +119,23 @@ function toDateKey(value: string) {
 
 function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
+}
+
+function formatDrinkBreakdown(
+  breakdownMap: Map<DrinkType, number>,
+  maxParts = 4,
+) {
+  const breakdownParts = Array.from(breakdownMap.entries())
+    .filter(([, value]) => value > 0)
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return (DRINK_ORDER.get(a[0]) ?? 999) - (DRINK_ORDER.get(b[0]) ?? 999);
+    })
+    .map(([drinkType, value]) => `${getDrinkEmoji(drinkType)}${value}`);
+  if (breakdownParts.length > maxParts) {
+    return `${breakdownParts.slice(0, maxParts).join(" ")} …`;
+  }
+  return breakdownParts.join(" ");
 }
 
 export default function Home() {
@@ -334,17 +354,60 @@ export default function Home() {
     const monthTarget = new Date();
     monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
 
-    const map = new Map<string, { day: number; month: number }>();
+    const createEmptyBreakdown = () => {
+      const breakdown = new Map<DrinkType, number>();
+      DRINKS.forEach((drink) => {
+        breakdown.set(drink.key, 0);
+      });
+      return breakdown;
+    };
+
+    const map = new Map<
+      string,
+      {
+        day: number;
+        month: number;
+        dayBreakdown: Map<DrinkType, number>;
+        monthBreakdown: Map<DrinkType, number>;
+      }
+    >();
 
     for (const memberId of householdMemberIds) {
-      map.set(memberId, { day: 0, month: 0 });
+      map.set(memberId, {
+        day: 0,
+        month: 0,
+        dayBreakdown: createEmptyBreakdown(),
+        monthBreakdown: createEmptyBreakdown(),
+      });
     }
 
     for (const log of logs) {
-      const stat = map.get(log.user_id) ?? { day: 0, month: 0 };
+      const stat = map.get(log.user_id) ?? {
+        day: 0,
+        month: 0,
+        dayBreakdown: createEmptyBreakdown(),
+        monthBreakdown: createEmptyBreakdown(),
+      };
       const createdAt = new Date(log.created_at);
-      if (isSameDateInLocal(createdAt, todayTarget)) stat.day += 1;
-      if (isSameMonthInLocal(createdAt, monthTarget)) stat.month += 1;
+      const drinkType = log.drink_type as DrinkType;
+      if (isSameDateInLocal(createdAt, todayTarget)) {
+        stat.day += 1;
+        if (DRINK_ORDER.has(drinkType)) {
+          stat.dayBreakdown.set(
+            drinkType,
+            (stat.dayBreakdown.get(drinkType) ?? 0) + 1,
+          );
+        }
+      }
+      if (isSameMonthInLocal(createdAt, monthTarget)) {
+        stat.month += 1;
+        if (DRINK_ORDER.has(drinkType)) {
+          stat.monthBreakdown.set(
+            drinkType,
+            (stat.monthBreakdown.get(drinkType) ?? 0) + 1,
+          );
+        }
+      }
       map.set(log.user_id, stat);
     }
 
@@ -471,10 +534,6 @@ export default function Home() {
 
   const selectedDayStats = useMemo(() => {
     if (sortedMemberIds.length === 0) return [];
-    const drinkOrderMap = new Map<DrinkType, number>();
-    DRINKS.forEach((drink, index) => {
-      drinkOrderMap.set(drink.key, index);
-    });
 
     const countMap = new Map<string, number>();
     const breakdownMap = new Map<string, Map<DrinkType, number>>();
@@ -494,25 +553,14 @@ export default function Home() {
       const memberDrinkMap = breakdownMap.get(log.user_id);
       if (!memberDrinkMap) continue;
       const drinkType = log.drink_type as DrinkType;
-      if (!drinkOrderMap.has(drinkType)) continue;
+      if (!DRINK_ORDER.has(drinkType)) continue;
       memberDrinkMap.set(drinkType, (memberDrinkMap.get(drinkType) ?? 0) + 1);
     }
 
     return sortedMemberIds.map((memberId) => {
       const count = countMap.get(memberId) ?? 0;
       const memberDrinkMap = breakdownMap.get(memberId) ?? new Map<DrinkType, number>();
-      const breakdownParts = Array.from(memberDrinkMap.entries())
-        .filter(([, value]) => value > 0)
-        .sort((a, b) => {
-          if (b[1] !== a[1]) return b[1] - a[1];
-          return (drinkOrderMap.get(a[0]) ?? 999) - (drinkOrderMap.get(b[0]) ?? 999);
-        })
-        .map(([drinkType, value]) => `${getDrinkEmoji(drinkType)}${value}`);
-      const maxParts = 4;
-      const breakdownText =
-        breakdownParts.length > maxParts
-          ? `${breakdownParts.slice(0, maxParts).join(" ")} …`
-          : breakdownParts.join(" ");
+      const breakdownText = formatDrinkBreakdown(memberDrinkMap);
 
       return {
         memberId,
@@ -918,6 +966,11 @@ export default function Home() {
                     <p className="text-sm text-slate-600 dark:text-slate-300">
                       ¥{(stat.day * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
+                    {stat.day > 0 && (
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                        {formatDrinkBreakdown(stat.dayBreakdown)}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -966,6 +1019,11 @@ export default function Home() {
                     <p className="text-sm text-slate-600 dark:text-slate-300">
                       ¥{(stat.month * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
+                    {stat.month > 0 && (
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                        {formatDrinkBreakdown(stat.monthBreakdown)}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
