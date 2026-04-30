@@ -143,3 +143,6 @@ for delete
 using (auth.uid() = user_id);
 
 grant select, insert, update, delete on table public.user_profiles to authenticated;
+grant select, insert, update, delete on table public.households to authenticated;
+grant select, insert, update, delete on table public.household_members to authenticated;
+grant select, insert, update, delete on table public.drink_logs to authenticated;

@@ -113,7 +113,8 @@ export default function Home() {
         .from("drink_logs")
         .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
         .eq("household_id", householdId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(20);
 
       if (error) {
         setMessage(`履歴取得エラー: ${error.message}`);
@@ -124,6 +125,14 @@ export default function Home() {
 
     void fetchLogs();
   }, [householdId, supabase, user]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     if (!supabase || !user) return;
@@ -223,6 +232,8 @@ export default function Home() {
 
   const isDayNextDisabled = dayOffset >= 0;
   const isMonthNextDisabled = monthOffset >= 0;
+  const isDayResetDisabled = dayOffset === 0;
+  const isMonthResetDisabled = monthOffset === 0;
 
   const formatMemberName = (memberUserId: string) => {
     const configuredName = profileMap[memberUserId]?.display_name?.trim();
@@ -565,18 +576,25 @@ export default function Home() {
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setDayOffset((prev) => prev - 1)}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95"
+                    className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
                   >
                     ←
                   </button>
                   <span className="font-medium text-slate-700">{dayLabel}</span>
+                  <button
+                    onClick={() => setDayOffset(0)}
+                    disabled={isDayResetDisabled}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    今日
+                  </button>
                   <button
                     onClick={() => {
                       if (isDayNextDisabled) return;
                       setDayOffset((prev) => prev + 1);
                     }}
                     disabled={isDayNextDisabled}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     →
                   </button>
@@ -606,18 +624,25 @@ export default function Home() {
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setMonthOffset((prev) => prev - 1)}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95"
+                    className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
                   >
                     ←
                   </button>
                   <span className="font-medium text-slate-700">{monthLabel}</span>
+                  <button
+                    onClick={() => setMonthOffset(0)}
+                    disabled={isMonthResetDisabled}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    今月
+                  </button>
                   <button
                     onClick={() => {
                       if (isMonthNextDisabled) return;
                       setMonthOffset((prev) => prev + 1);
                     }}
                     disabled={isMonthNextDisabled}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     →
                   </button>
@@ -658,10 +683,9 @@ export default function Home() {
                   className="rounded border border-gray-200 px-3 py-2 text-sm"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span>
-                      {formatDrinkLabel(log)}
-                      {" · "}
-                      {formatMemberName(log.user_id)}
+                    <span className="truncate text-gray-800">
+                      {formatDrinkLabel(log)} · {formatMemberName(log.user_id)} ·{" "}
+                      {new Date(log.created_at).toLocaleString("ja-JP")}
                     </span>
                     <button
                       onClick={() => handleDeleteLog(log)}
@@ -670,9 +694,6 @@ export default function Home() {
                     >
                       削除
                     </button>
-                  </div>
-                  <div className="mt-1 text-right text-gray-600">
-                    {new Date(log.created_at).toLocaleString("ja-JP")}
                   </div>
                 </li>
               ))}
@@ -747,9 +768,17 @@ export default function Home() {
       )}
 
       {message && (
-        <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-          {message}
-        </p>
+        <div className="pointer-events-none fixed left-1/2 top-4 z-50 w-[92%] max-w-md -translate-x-1/2">
+          <p
+            className={`rounded-xl border p-3 text-sm shadow-lg backdrop-blur-sm transition-opacity ${
+              message.includes("失敗") || message.includes("エラー")
+                ? "border-red-200 bg-red-50 text-red-800"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
+          >
+            {message}
+          </p>
+        </div>
       )}
     </main>
   );
