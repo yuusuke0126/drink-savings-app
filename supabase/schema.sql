@@ -18,9 +18,13 @@ on public.household_members(user_id);
 create table if not exists public.user_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   default_household_id uuid references public.households(id) on delete set null,
+  display_name text check (display_name is null or char_length(display_name) between 1 and 20),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.user_profiles
+add column if not exists display_name text check (display_name is null or char_length(display_name) between 1 and 20);
 
 create table if not exists public.drink_logs (
   id uuid primary key default gen_random_uuid(),
@@ -76,6 +80,21 @@ create policy "user_profiles_select_self"
 on public.user_profiles
 for select
 using (user_id = auth.uid());
+
+drop policy if exists "user_profiles_select_same_household" on public.user_profiles;
+create policy "user_profiles_select_same_household"
+on public.user_profiles
+for select
+using (
+  exists (
+    select 1
+    from public.household_members hm_self
+    join public.household_members hm_target
+      on hm_self.household_id = hm_target.household_id
+    where hm_self.user_id = auth.uid()
+      and hm_target.user_id = user_profiles.user_id
+  )
+);
 
 drop policy if exists "user_profiles_insert_self" on public.user_profiles;
 create policy "user_profiles_insert_self"

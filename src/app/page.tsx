@@ -21,6 +21,12 @@ type DrinkLog = {
   created_at: string;
 };
 
+type UserProfile = {
+  user_id: string;
+  default_household_id: string | null;
+  display_name: string | null;
+};
+
 const DRINKS: { key: DrinkType; label: string }[] = [
   { key: "beer", label: "ビール" },
   { key: "whisky", label: "ウイスキー" },
@@ -68,6 +74,8 @@ export default function Home() {
   const [householdIdInput, setHouseholdIdInput] = useState("");
   const [householdId, setHouseholdId] = useState("");
   const [isHouseholdSettingsOpen, setIsHouseholdSettingsOpen] = useState(false);
+  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
   const [dayOffset, setDayOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
   const [message, setMessage] = useState(
@@ -90,6 +98,7 @@ export default function Home() {
       setUser(session?.user ?? null);
       if (!session?.user) {
         setLogs([]);
+        setProfileMap({});
       }
     });
 
@@ -122,7 +131,7 @@ export default function Home() {
     const loadProfile = async () => {
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("default_household_id")
+        .select("user_id,default_household_id,display_name")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -132,13 +141,43 @@ export default function Home() {
       }
 
       const savedHouseholdId = data?.default_household_id ?? "";
+      const ownDisplayName = data?.display_name ?? "";
       setHouseholdId(savedHouseholdId);
       setHouseholdIdInput(savedHouseholdId);
+      setDisplayNameInput(ownDisplayName);
       setIsHouseholdSettingsOpen(!savedHouseholdId);
     };
 
     void loadProfile();
   }, [supabase, user]);
+
+  useEffect(() => {
+    if (!supabase || !user || !householdId) return;
+
+    const loadVisibleProfiles = async () => {
+      const userIds = Array.from(new Set(logs.map((log) => log.user_id)));
+      if (!userIds.includes(user.id)) userIds.push(user.id);
+      if (userIds.length === 0) return;
+
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("user_id,default_household_id,display_name")
+        .in("user_id", userIds);
+
+      if (error) {
+        setMessage(`表示名取得エラー: ${error.message}`);
+        return;
+      }
+
+      const nextMap: Record<string, UserProfile> = {};
+      for (const profile of (data as UserProfile[]) ?? []) {
+        nextMap[profile.user_id] = profile;
+      }
+      setProfileMap(nextMap);
+    };
+
+    void loadVisibleProfiles();
+  }, [householdId, logs, supabase, user]);
 
   const userStats = useMemo(() => {
     const todayTarget = new Date();
@@ -182,32 +221,18 @@ export default function Home() {
     return `${target.getFullYear()}年${target.getMonth() + 1}月`;
   }, [monthOffset]);
 
-  const summaryStats = useMemo(() => {
-    let selfDay = 0;
-    let selfMonth = 0;
-    let sharedDay = 0;
-    let sharedMonth = 0;
-
-    for (const [userId, stat] of userStats) {
-      if (userId === user?.id) {
-        selfDay += stat.day;
-        selfMonth += stat.month;
-      } else {
-        sharedDay += stat.day;
-        sharedMonth += stat.month;
-      }
-    }
-
-    return {
-      selfDay,
-      selfMonth,
-      sharedDay,
-      sharedMonth,
-    };
-  }, [user?.id, userStats]);
-
   const isDayNextDisabled = dayOffset >= 0;
   const isMonthNextDisabled = monthOffset >= 0;
+
+  const formatMemberName = (memberUserId: string) => {
+    const configuredName = profileMap[memberUserId]?.display_name?.trim();
+    if (memberUserId === user?.id) {
+      if (configuredName) return `自分 (${configuredName})`;
+      return "自分";
+    }
+    if (configuredName) return configuredName;
+    return `メンバー (${memberUserId.slice(0, 8)})`;
+  };
 
   const handleSignIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -346,6 +371,50 @@ export default function Home() {
     setIsSubmitting(false);
   };
 
+  const handleSaveDisplayName = async () => {
+    if (!supabase || !user) {
+      setMessage("ログイン後に表示名を設定してください。");
+      return;
+    }
+
+    const normalizedName = displayNameInput.trim();
+    if (normalizedName.length < 1 || normalizedName.length > 20) {
+      setMessage("表示名は1〜20文字で入力してください。");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("user_profiles")
+      .upsert(
+        {
+          user_id: user.id,
+          display_name: normalizedName,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+
+    if (error) {
+      setMessage(`表示名保存失敗: ${error.message}`);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setProfileMap((current) => ({
+      ...current,
+      [user.id]: {
+        user_id: user.id,
+        default_household_id: householdId || null,
+        display_name: normalizedName,
+      },
+    }));
+    setMessage("表示名を保存しました。");
+    setIsSubmitting(false);
+  };
+
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -445,6 +514,23 @@ export default function Home() {
             </div>
 
             <h2 className="mb-3 font-semibold">1杯記録</h2>
+            <div className="mb-3 flex flex-col gap-2 rounded border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center">
+              <label className="text-sm font-medium text-slate-700">表示名</label>
+              <input
+                className="w-full rounded border px-3 py-2 text-sm"
+                placeholder="1〜20文字で入力"
+                maxLength={20}
+                value={displayNameInput}
+                onChange={(e) => setDisplayNameInput(e.target.value)}
+              />
+              <button
+                onClick={handleSaveDisplayName}
+                disabled={isSubmitting}
+                className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+              >
+                名前を保存
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DRINKS.map((drink) => (
                 <button
@@ -514,24 +600,20 @@ export default function Home() {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-                  <p className="text-xs font-semibold text-blue-700">自分</p>
-                  <p className="text-2xl font-bold text-slate-800">
-                    {summaryStats.selfDay}杯
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    ¥{(summaryStats.selfDay * SAVINGS_PER_DRINK).toLocaleString()}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold text-slate-600">共有メンバー</p>
-                  <p className="text-2xl font-bold text-slate-800">
-                    {summaryStats.sharedDay}杯
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    ¥{(summaryStats.sharedDay * SAVINGS_PER_DRINK).toLocaleString()}
-                  </p>
-                </div>
+                {userStats.map(([memberUserId, stat]) => (
+                  <div
+                    key={`day-${memberUserId}`}
+                    className="rounded-lg border border-blue-100 bg-blue-50 p-3"
+                  >
+                    <p className="text-xs font-semibold text-blue-700">
+                      {formatMemberName(memberUserId)}
+                    </p>
+                    <p className="text-2xl font-bold text-slate-800">{stat.day}杯</p>
+                    <p className="text-sm text-slate-600">
+                      ¥{(stat.day * SAVINGS_PER_DRINK).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -559,24 +641,20 @@ export default function Home() {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3">
-                  <p className="text-xs font-semibold text-indigo-700">自分</p>
-                  <p className="text-2xl font-bold text-slate-800">
-                    {summaryStats.selfMonth}杯
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    ¥{(summaryStats.selfMonth * SAVINGS_PER_DRINK).toLocaleString()}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold text-slate-600">共有メンバー</p>
-                  <p className="text-2xl font-bold text-slate-800">
-                    {summaryStats.sharedMonth}杯
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    ¥{(summaryStats.sharedMonth * SAVINGS_PER_DRINK).toLocaleString()}
-                  </p>
-                </div>
+                {userStats.map(([memberUserId, stat]) => (
+                  <div
+                    key={`month-${memberUserId}`}
+                    className="rounded-lg border border-indigo-100 bg-indigo-50 p-3"
+                  >
+                    <p className="text-xs font-semibold text-indigo-700">
+                      {formatMemberName(memberUserId)}
+                    </p>
+                    <p className="text-2xl font-bold text-slate-800">{stat.month}杯</p>
+                    <p className="text-sm text-slate-600">
+                      ¥{(stat.month * SAVINGS_PER_DRINK).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -600,7 +678,7 @@ export default function Home() {
                     <span>
                       {formatDrinkLabel(log)}
                       {" · "}
-                      {log.user_id === user.id ? "自分" : "共有メンバー"}
+                      {formatMemberName(log.user_id)}
                     </span>
                     <button
                       onClick={() => handleDeleteLog(log)}
