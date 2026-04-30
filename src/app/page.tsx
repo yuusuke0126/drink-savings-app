@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type DrinkType =
@@ -59,6 +60,35 @@ function formatDrinkLabel(log: DrinkLog) {
   }
   const found = DRINKS.find((d) => d.key === log.drink_type);
   return found?.label ?? log.drink_type;
+}
+
+function getDrinkEmoji(drinkType: string) {
+  switch (drinkType) {
+    case "beer":
+      return "🍺";
+    case "whisky":
+      return "🥃";
+    case "wine":
+      return "🍷";
+    case "sake":
+      return "🍶";
+    case "shochu":
+      return "🍹";
+    case "other":
+      return "🍸";
+    default:
+      return "🍸";
+  }
+}
+
+function formatHistoryDate(value: string) {
+  return new Date(value).toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 export default function Home() {
@@ -672,7 +702,15 @@ export default function Home() {
           </section>
 
           <section className="rounded border p-4">
-            <h2 className="mb-3 font-semibold">履歴</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold">履歴</h2>
+              <Link
+                href="/history"
+                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
+              >
+                すべての履歴を見る
+              </Link>
+            </div>
             <ul className="space-y-2">
               {logs.length === 0 && (
                 <li className="text-sm text-gray-600">まだ記録がありません。</li>
@@ -680,17 +718,17 @@ export default function Home() {
               {logs.map((log) => (
                 <li
                   key={log.id}
-                  className="rounded border border-gray-200 px-3 py-2 text-sm"
+                  className="rounded border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900/40"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-gray-800">
-                      {formatDrinkLabel(log)} · {formatMemberName(log.user_id)} ·{" "}
-                      {new Date(log.created_at).toLocaleString("ja-JP")}
+                    <span className="truncate text-gray-800 dark:text-gray-100">
+                      {getDrinkEmoji(log.drink_type)} {formatDrinkLabel(log)} ·{" "}
+                      {formatMemberName(log.user_id)} · {formatHistoryDate(log.created_at)}
                     </span>
                     <button
                       onClick={() => handleDeleteLog(log)}
                       disabled={isSubmitting || log.user_id !== user.id}
-                      className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="shrink-0 whitespace-nowrap rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-700 dark:text-red-300"
                     >
                       削除
                     </button>
