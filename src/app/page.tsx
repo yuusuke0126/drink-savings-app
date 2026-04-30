@@ -72,6 +72,7 @@ export default function Home() {
   const [otherDrinkName, setOtherDrinkName] = useState("");
   const [householdIdInput, setHouseholdIdInput] = useState("");
   const [householdId, setHouseholdId] = useState("");
+  const [isHouseholdSettingsOpen, setIsHouseholdSettingsOpen] = useState(false);
   const [message, setMessage] = useState(
     supabase
       ? ""
@@ -136,6 +137,7 @@ export default function Home() {
       const savedHouseholdId = data?.default_household_id ?? "";
       setHouseholdId(savedHouseholdId);
       setHouseholdIdInput(savedHouseholdId);
+      setIsHouseholdSettingsOpen(!savedHouseholdId);
     };
 
     void loadProfile();
@@ -294,6 +296,7 @@ export default function Home() {
     }
 
     setMessage("household_id を保存しました。");
+    setIsHouseholdSettingsOpen(false);
     setIsSubmitting(false);
   };
 
@@ -395,28 +398,6 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mb-4 rounded border border-gray-200 p-3">
-              <p className="mb-2 text-sm font-semibold">共有グループ設定 (household_id)</p>
-              <p className="mb-2 text-xs text-gray-600">
-                夫婦で同じ household_id を設定すると、お互いの記録を同じ履歴で閲覧できます。
-              </p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  placeholder="例: 8f2b... (uuid)"
-                  value={householdIdInput}
-                  onChange={(e) => setHouseholdIdInput(e.target.value)}
-                />
-                <button
-                  onClick={handleSaveHouseholdId}
-                  disabled={isSubmitting}
-                  className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-                >
-                  保存
-                </button>
-              </div>
-            </div>
-
             <h2 className="mb-3 font-semibold">1杯記録</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DRINKS.map((drink) => (
@@ -514,6 +495,42 @@ export default function Home() {
                 </li>
               ))}
             </ul>
+          </section>
+
+          <section className="rounded border p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">共有グループ設定</h2>
+              <button
+                onClick={() =>
+                  setIsHouseholdSettingsOpen((previous) => !previous)
+                }
+                className="rounded border px-2 py-1 text-xs"
+              >
+                {isHouseholdSettingsOpen ? "設定を閉じる" : "設定を開く"}
+              </button>
+            </div>
+            <p className="mb-2 text-xs text-gray-600">
+              household_id は通常1度設定すれば再入力不要です。必要なときだけ変更してください。
+            </p>
+            {isHouseholdSettingsOpen ? (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  placeholder="例: 8f2b... (uuid)"
+                  value={householdIdInput}
+                  onChange={(e) => setHouseholdIdInput(e.target.value)}
+                />
+                <button
+                  onClick={handleSaveHouseholdId}
+                  disabled={isSubmitting}
+                  className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  保存
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600">現在の household_id: {householdId || "(未設定)"}</p>
+            )}
           </section>
         </>
       )}
