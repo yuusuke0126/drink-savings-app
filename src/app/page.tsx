@@ -38,6 +38,7 @@ const DRINKS: { key: DrinkType; label: string }[] = [
 ];
 
 const SAVINGS_PER_DRINK = 500;
+const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 function isSameDateInLocal(date: Date, target: Date) {
   return (
@@ -91,12 +92,21 @@ function formatHistoryDate(value: string) {
   });
 }
 
+function toDateKey(value: string) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function Home() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [logs, setLogs] = useState<DrinkLog[]>([]);
+  const [calendarLogs, setCalendarLogs] = useState<DrinkLog[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtherInputOpen, setIsOtherInputOpen] = useState(false);
@@ -108,6 +118,8 @@ export default function Home() {
   const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
   const [dayOffset, setDayOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState("");
   const [message, setMessage] = useState(
     supabase
       ? ""
@@ -157,6 +169,49 @@ export default function Home() {
   }, [householdId, supabase, user]);
 
   useEffect(() => {
+    if (!supabase || !user || !householdId) return;
+
+    const calendarMonth = new Date();
+    calendarMonth.setMonth(calendarMonth.getMonth() + calendarMonthOffset);
+    const monthStart = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+    const monthEnd = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth() + 1,
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+
+    const fetchCalendarLogs = async () => {
+      const { data, error } = await supabase
+        .from("drink_logs")
+        .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+        .eq("household_id", householdId)
+        .gte("created_at", monthStart.toISOString())
+        .lt("created_at", monthEnd.toISOString())
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setMessage(`カレンダー取得エラー: ${error.message}`);
+        return;
+      }
+      setCalendarLogs((data as DrinkLog[]) ?? []);
+    };
+
+    void fetchCalendarLogs();
+  }, [calendarMonthOffset, householdId, supabase, user]);
+
+  useEffect(() => {
     if (!message) return;
     const timeoutId = window.setTimeout(() => {
       setMessage("");
@@ -194,7 +249,9 @@ export default function Home() {
     if (!supabase || !user || !householdId) return;
 
     const loadVisibleProfiles = async () => {
-      const userIds = Array.from(new Set(logs.map((log) => log.user_id)));
+      const userIds = Array.from(
+        new Set([...logs, ...calendarLogs].map((log) => log.user_id)),
+      );
       if (!userIds.includes(user.id)) userIds.push(user.id);
       if (userIds.length === 0) return;
 
@@ -216,7 +273,7 @@ export default function Home() {
     };
 
     void loadVisibleProfiles();
-  }, [householdId, logs, supabase, user]);
+  }, [calendarLogs, householdId, logs, supabase, user]);
 
   const userStats = useMemo(() => {
     const todayTarget = new Date();
@@ -259,6 +316,85 @@ export default function Home() {
     target.setMonth(target.getMonth() + monthOffset);
     return `${target.getFullYear()}年${target.getMonth() + 1}月`;
   }, [monthOffset]);
+
+  const calendarMonthDate = useMemo(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + calendarMonthOffset);
+    return date;
+  }, [calendarMonthOffset]);
+
+  const calendarMonthLabel = useMemo(
+    () =>
+      `${calendarMonthDate.getFullYear()}年${calendarMonthDate.getMonth() + 1}月`,
+    [calendarMonthDate],
+  );
+
+  const calendarDateMarkers = useMemo(() => {
+    const map = new Map<string, { self: boolean; other: boolean }>();
+    for (const log of calendarLogs) {
+      const key = toDateKey(log.created_at);
+      const current = map.get(key) ?? { self: false, other: false };
+      if (log.user_id === user?.id) {
+        current.self = true;
+      } else {
+        current.other = true;
+      }
+      map.set(key, current);
+    }
+    return map;
+  }, [calendarLogs, user?.id]);
+
+  const calendarGrid = useMemo(() => {
+    const year = calendarMonthDate.getFullYear();
+    const month = calendarMonthDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: Array<number | null> = [];
+    for (let i = 0; i < firstDay; i += 1) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [calendarMonthDate]);
+
+  const defaultCalendarDateKey = useMemo(() => {
+    const today = new Date();
+    const monthDate = new Date(
+      calendarMonthDate.getFullYear(),
+      calendarMonthDate.getMonth(),
+      1,
+    );
+    const selectedDefault = new Date(
+      monthDate.getFullYear(),
+      monthDate.getMonth(),
+      monthDate.getMonth() === today.getMonth() &&
+        monthDate.getFullYear() === today.getFullYear()
+        ? today.getDate()
+        : 1,
+    );
+    return toDateKey(selectedDefault.toISOString());
+  }, [calendarMonthDate]);
+
+  const activeCalendarDateKey = useMemo(() => {
+    const monthPrefix = `${calendarMonthDate.getFullYear()}-${`${calendarMonthDate.getMonth() + 1}`.padStart(2, "0")}-`;
+    if (selectedCalendarDate.startsWith(monthPrefix)) {
+      return selectedCalendarDate;
+    }
+    return defaultCalendarDateKey;
+  }, [calendarMonthDate, defaultCalendarDateKey, selectedCalendarDate]);
+
+  const selectedDayStats = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const log of calendarLogs) {
+      if (toDateKey(log.created_at) !== activeCalendarDateKey) continue;
+      map.set(log.user_id, (map.get(log.user_id) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (!user) return a.localeCompare(b);
+      if (a === user.id) return -1;
+      if (b === user.id) return 1;
+      return a.localeCompare(b);
+    });
+  }, [activeCalendarDateKey, calendarLogs, user]);
 
   const isDayNextDisabled = dayOffset >= 0;
   const isMonthNextDisabled = monthOffset >= 0;
@@ -601,7 +737,15 @@ export default function Home() {
           </section>
 
           <section className="rounded border border-slate-200 bg-slate-50/70 p-4">
-            <h2 className="mb-4 font-semibold text-slate-800">集計（人別）</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-800">集計（人別）</h2>
+              <Link
+                href="/analytics"
+                className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
+              >
+                集計詳細
+              </Link>
+            </div>
 
             <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50 p-3">
               <div className="mb-3 flex items-center justify-between">
@@ -702,6 +846,95 @@ export default function Home() {
             {userStats.length === 0 && (
               <p className="mt-3 text-sm text-gray-600">まだ記録がありません。</p>
             )}
+          </section>
+
+          <section className="rounded border border-slate-200 bg-slate-50/70 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-800">カレンダー</h2>
+              <div className="flex items-center gap-2 text-sm">
+                <button
+                  onClick={() => setCalendarMonthOffset((prev) => prev - 1)}
+                  className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
+                >
+                  ←
+                </button>
+                <span className="font-medium text-slate-700">{calendarMonthLabel}</span>
+                <button
+                  onClick={() => setCalendarMonthOffset((prev) => prev + 1)}
+                  className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
+                >
+                  →
+                </button>
+                <button
+                  onClick={() => setCalendarMonthOffset(0)}
+                  disabled={calendarMonthOffset === 0}
+                  className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  今月
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-600">
+              {WEEKDAY_LABELS.map((label) => (
+                <div key={label} className="py-1 font-medium">
+                  {label}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {calendarGrid.map((day, index) => {
+                if (!day) {
+                  return <div key={`empty-${index}`} className="h-12 rounded-md" />;
+                }
+                const dateKey = `${calendarMonthDate.getFullYear()}-${`${calendarMonthDate.getMonth() + 1}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+                const marker = calendarDateMarkers.get(dateKey);
+                const isSelected = dateKey === activeCalendarDateKey;
+                return (
+                  <button
+                    key={dateKey}
+                    onClick={() => setSelectedCalendarDate(dateKey)}
+                    className={`h-12 rounded-md border text-xs transition ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-slate-200 bg-white hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="text-slate-700">{day}</div>
+                    <div className="mt-1 flex items-center justify-center gap-1">
+                      {marker?.self && <span className="h-2 w-2 rounded-full bg-red-500" />}
+                      {marker?.other && <span className="h-2 w-2 rounded-full bg-blue-500" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+              <p className="mb-2 text-sm font-semibold text-slate-700">
+                {activeCalendarDateKey} のサマリー
+              </p>
+              {selectedDayStats.length === 0 ? (
+                <p className="text-sm text-slate-500">この日の記録はありません。</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {selectedDayStats.map(([memberUserId, count]) => (
+                    <div
+                      key={`calendar-summary-${memberUserId}`}
+                      className="rounded border border-slate-200 bg-slate-50 p-2"
+                    >
+                      <p className="text-xs font-semibold text-slate-700">
+                        {formatMemberName(memberUserId)}
+                      </p>
+                      <p className="text-lg font-bold text-slate-800">{count}杯</p>
+                      <p className="text-xs text-slate-600">
+                        ¥{(count * SAVINGS_PER_DRINK).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="rounded border p-4">
