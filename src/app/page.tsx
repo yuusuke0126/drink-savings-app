@@ -575,6 +575,7 @@ export default function Home() {
   const isMonthNextDisabled = monthOffset >= 0;
   const isDayResetDisabled = dayOffset === 0;
   const isMonthResetDisabled = monthOffset === 0;
+  const isCalendarMonthNextDisabled = calendarMonthOffset >= 0;
 
   const formatMemberName = (memberUserId: string) => {
     const configuredName = profileMap[memberUserId]?.display_name?.trim();
@@ -1046,8 +1047,12 @@ export default function Home() {
                 </button>
                 <span className="font-medium text-slate-700 dark:text-slate-200">{calendarMonthLabel}</span>
                 <button
-                  onClick={() => setCalendarMonthOffset((prev) => prev + 1)}
-                  className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
+                  onClick={() => {
+                    if (isCalendarMonthNextDisabled) return;
+                    setCalendarMonthOffset((prev) => prev + 1);
+                  }}
+                  disabled={isCalendarMonthNextDisabled}
+                  className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   →
                 </button>
