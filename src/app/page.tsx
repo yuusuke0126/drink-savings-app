@@ -62,10 +62,6 @@ function formatUserLabel(logUserId: string, currentUserId?: string) {
 
 export default function Home() {
   const supabase = getSupabaseClient();
-  const initialHouseholdId =
-    typeof window !== "undefined"
-      ? window.localStorage.getItem("drink_app_household_id") ?? ""
-      : "";
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,8 +70,8 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<DrinkType | null>(null);
   const [otherDrinkName, setOtherDrinkName] = useState("");
-  const [householdIdInput, setHouseholdIdInput] = useState(initialHouseholdId);
-  const [householdId, setHouseholdId] = useState(initialHouseholdId);
+  const [householdIdInput, setHouseholdIdInput] = useState("");
+  const [householdId, setHouseholdId] = useState("");
   const [message, setMessage] = useState(
     supabase
       ? ""
@@ -121,6 +117,29 @@ export default function Home() {
 
     void fetchLogs();
   }, [householdId, supabase, user]);
+
+  useEffect(() => {
+    if (!supabase || !user) return;
+
+    const loadProfile = async () => {
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("default_household_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        setMessage(`プロフィール取得エラー: ${error.message}`);
+        return;
+      }
+
+      const savedHouseholdId = data?.default_household_id ?? "";
+      setHouseholdId(savedHouseholdId);
+      setHouseholdIdInput(savedHouseholdId);
+    };
+
+    void loadProfile();
+  }, [supabase, user]);
 
   const userStats = useMemo(() => {
     const now = new Date();
@@ -252,7 +271,23 @@ export default function Home() {
     }
 
     setHouseholdId(normalized);
-    window.localStorage.setItem("drink_app_household_id", normalized);
+    const { error: profileError } = await supabase
+      .from("user_profiles")
+      .upsert(
+        {
+          user_id: user.id,
+          default_household_id: normalized,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+
+    if (profileError) {
+      setMessage(`プロフィール保存失敗: ${profileError.message}`);
+      setIsSubmitting(false);
+      return;
+    }
+
     setMessage("household_id を保存しました。");
     setIsSubmitting(false);
   };

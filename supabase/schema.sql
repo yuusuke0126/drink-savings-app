@@ -15,6 +15,13 @@ create table if not exists public.household_members (
 create index if not exists household_members_user_id_idx
 on public.household_members(user_id);
 
+create table if not exists public.user_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  default_household_id uuid references public.households(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.drink_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -31,6 +38,7 @@ create index if not exists drink_logs_created_at_idx on public.drink_logs(create
 alter table public.households enable row level security;
 alter table public.household_members enable row level security;
 alter table public.drink_logs enable row level security;
+alter table public.user_profiles enable row level security;
 
 drop policy if exists "households_select_member" on public.households;
 create policy "households_select_member"
@@ -61,6 +69,25 @@ drop policy if exists "household_members_insert_self" on public.household_member
 create policy "household_members_insert_self"
 on public.household_members
 for insert
+with check (user_id = auth.uid());
+
+drop policy if exists "user_profiles_select_self" on public.user_profiles;
+create policy "user_profiles_select_self"
+on public.user_profiles
+for select
+using (user_id = auth.uid());
+
+drop policy if exists "user_profiles_insert_self" on public.user_profiles;
+create policy "user_profiles_insert_self"
+on public.user_profiles
+for insert
+with check (user_id = auth.uid());
+
+drop policy if exists "user_profiles_update_self" on public.user_profiles;
+create policy "user_profiles_update_self"
+on public.user_profiles
+for update
+using (user_id = auth.uid())
 with check (user_id = auth.uid());
 
 drop policy if exists "drink_logs_select_household" on public.drink_logs;
@@ -95,3 +122,5 @@ create policy "drink_logs_delete_own"
 on public.drink_logs
 for delete
 using (auth.uid() = user_id);
+
+grant select, insert, update, delete on table public.user_profiles to authenticated;
