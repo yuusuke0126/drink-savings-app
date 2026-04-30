@@ -1,0 +1,16 @@
+{
+  "name": "Drink Savings App",
+  "short_name": "DrinkSave",
+  "description": "Track drinks and savings.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/next.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
