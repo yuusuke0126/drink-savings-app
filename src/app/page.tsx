@@ -39,6 +39,14 @@ const DRINKS: { key: DrinkType; label: string }[] = [
 
 const SAVINGS_PER_DRINK = 500;
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+const MEMBER_COLOR_CLASSES = [
+  "bg-red-500",
+  "bg-blue-500",
+  "bg-emerald-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-pink-500",
+];
 const SECTION_CARD_CLASS =
   "rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/40";
 const OUTLINE_BUTTON_CLASS =
@@ -119,6 +127,7 @@ export default function Home() {
   const [otherDrinkName, setOtherDrinkName] = useState("");
   const [householdIdInput, setHouseholdIdInput] = useState("");
   const [householdId, setHouseholdId] = useState("");
+  const [householdMemberIds, setHouseholdMemberIds] = useState<string[]>([]);
   const [isHouseholdSettingsOpen, setIsHouseholdSettingsOpen] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
@@ -146,6 +155,8 @@ export default function Home() {
       setUser(session?.user ?? null);
       if (!session?.user) {
         setLogs([]);
+        setCalendarLogs([]);
+        setHouseholdMemberIds([]);
         setProfileMap({});
       }
     });
@@ -218,6 +229,32 @@ export default function Home() {
   }, [calendarMonthOffset, householdId, supabase, user]);
 
   useEffect(() => {
+    if (!supabase || !user || !householdId) return;
+
+    const fetchHouseholdMembers = async () => {
+      const { data, error } = await supabase
+        .from("household_members")
+        .select("user_id")
+        .eq("household_id", householdId);
+
+      if (error) {
+        setMessage(`メンバー取得エラー: ${error.message}`);
+        return;
+      }
+
+      const ids = Array.from(
+        new Set(
+          ((data as { user_id: string }[] | null) ?? []).map((row) => row.user_id),
+        ),
+      );
+      if (!ids.includes(user.id)) ids.push(user.id);
+      setHouseholdMemberIds(ids);
+    };
+
+    void fetchHouseholdMembers();
+  }, [householdId, supabase, user]);
+
+  useEffect(() => {
     if (!message) return;
     const timeoutId = window.setTimeout(() => {
       setMessage("");
@@ -256,7 +293,11 @@ export default function Home() {
 
     const loadVisibleProfiles = async () => {
       const userIds = Array.from(
-        new Set([...logs, ...calendarLogs].map((log) => log.user_id)),
+        new Set([
+          ...householdMemberIds,
+          ...logs.map((log) => log.user_id),
+          ...calendarLogs.map((log) => log.user_id),
+        ]),
       );
       if (!userIds.includes(user.id)) userIds.push(user.id);
       if (userIds.length === 0) return;
@@ -279,7 +320,7 @@ export default function Home() {
     };
 
     void loadVisibleProfiles();
-  }, [calendarLogs, householdId, logs, supabase, user]);
+  }, [calendarLogs, householdId, householdMemberIds, logs, supabase, user]);
 
   const userStats = useMemo(() => {
     const todayTarget = new Date();
@@ -289,6 +330,10 @@ export default function Home() {
     monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
 
     const map = new Map<string, { day: number; month: number }>();
+
+    for (const memberId of householdMemberIds) {
+      map.set(memberId, { day: 0, month: 0 });
+    }
 
     for (const log of logs) {
       const stat = map.get(log.user_id) ?? { day: 0, month: 0 };
@@ -304,7 +349,7 @@ export default function Home() {
       if (b === user.id) return 1;
       return a.localeCompare(b);
     });
-  }, [dayOffset, logs, monthOffset, user]);
+  }, [dayOffset, householdMemberIds, logs, monthOffset, user]);
 
   const dayLabel = useMemo(() => {
     const target = new Date();
@@ -335,20 +380,49 @@ export default function Home() {
     [calendarMonthDate],
   );
 
+  const sortedMemberIds = useMemo(() => {
+    const ids = Array.from(new Set(householdMemberIds));
+    if (user?.id && !ids.includes(user.id)) ids.push(user.id);
+    return ids.sort((a, b) => {
+      if (!user) return a.localeCompare(b);
+      if (a === user.id) return -1;
+      if (b === user.id) return 1;
+      return a.localeCompare(b);
+    });
+  }, [householdMemberIds, user]);
+
+  const memberColorMap = useMemo(() => {
+    const colorMap = new Map<string, string>();
+    sortedMemberIds.forEach((memberId, index) => {
+      colorMap.set(memberId, MEMBER_COLOR_CLASSES[index % MEMBER_COLOR_CLASSES.length]);
+    });
+    return colorMap;
+  }, [sortedMemberIds]);
+
   const calendarDateMarkers = useMemo(() => {
-    const map = new Map<string, { self: boolean; other: boolean }>();
+    const map = new Map<string, Set<string>>();
     for (const log of calendarLogs) {
       const key = toDateKey(log.created_at);
-      const current = map.get(key) ?? { self: false, other: false };
-      if (log.user_id === user?.id) {
-        current.self = true;
-      } else {
-        current.other = true;
-      }
+      const current = map.get(key) ?? new Set<string>();
+      current.add(log.user_id);
       map.set(key, current);
     }
-    return map;
-  }, [calendarLogs, user?.id]);
+
+    const sortedMap = new Map<string, string[]>();
+    for (const [key, memberSet] of map.entries()) {
+      const ids = Array.from(memberSet);
+      ids.sort((a, b) => {
+        const ai = sortedMemberIds.indexOf(a);
+        const bi = sortedMemberIds.indexOf(b);
+        if (ai === -1 && bi === -1) return a.localeCompare(b);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
+      sortedMap.set(key, ids);
+    }
+    return sortedMap;
+  }, [calendarLogs, sortedMemberIds]);
 
   const calendarGrid = useMemo(() => {
     const year = calendarMonthDate.getFullYear();
@@ -389,18 +463,58 @@ export default function Home() {
   }, [calendarMonthDate, defaultCalendarDateKey, selectedCalendarDate]);
 
   const selectedDayStats = useMemo(() => {
-    const map = new Map<string, number>();
+    if (sortedMemberIds.length === 0) return [];
+    const drinkOrderMap = new Map<DrinkType, number>();
+    DRINKS.forEach((drink, index) => {
+      drinkOrderMap.set(drink.key, index);
+    });
+
+    const countMap = new Map<string, number>();
+    const breakdownMap = new Map<string, Map<DrinkType, number>>();
+    for (const memberId of sortedMemberIds) {
+      countMap.set(memberId, 0);
+      const memberDrinkMap = new Map<DrinkType, number>();
+      DRINKS.forEach((drink) => {
+        memberDrinkMap.set(drink.key, 0);
+      });
+      breakdownMap.set(memberId, memberDrinkMap);
+    }
+
     for (const log of calendarLogs) {
       if (toDateKey(log.created_at) !== activeCalendarDateKey) continue;
-      map.set(log.user_id, (map.get(log.user_id) ?? 0) + 1);
+      if (!countMap.has(log.user_id)) continue;
+      countMap.set(log.user_id, (countMap.get(log.user_id) ?? 0) + 1);
+      const memberDrinkMap = breakdownMap.get(log.user_id);
+      if (!memberDrinkMap) continue;
+      const drinkType = log.drink_type as DrinkType;
+      if (!drinkOrderMap.has(drinkType)) continue;
+      memberDrinkMap.set(drinkType, (memberDrinkMap.get(drinkType) ?? 0) + 1);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (!user) return a.localeCompare(b);
-      if (a === user.id) return -1;
-      if (b === user.id) return 1;
-      return a.localeCompare(b);
+
+    return sortedMemberIds.map((memberId) => {
+      const count = countMap.get(memberId) ?? 0;
+      const memberDrinkMap = breakdownMap.get(memberId) ?? new Map<DrinkType, number>();
+      const breakdownParts = Array.from(memberDrinkMap.entries())
+        .filter(([, value]) => value > 0)
+        .sort((a, b) => {
+          if (b[1] !== a[1]) return b[1] - a[1];
+          return (drinkOrderMap.get(a[0]) ?? 999) - (drinkOrderMap.get(b[0]) ?? 999);
+        })
+        .map(([drinkType, value]) => `${getDrinkEmoji(drinkType)}${value}`);
+      const maxParts = 4;
+      const breakdownText =
+        breakdownParts.length > maxParts
+          ? `${breakdownParts.slice(0, maxParts).join(" ")} …`
+          : breakdownParts.join(" ");
+
+      return {
+        memberId,
+        count,
+        amount: count * SAVINGS_PER_DRINK,
+        breakdownText,
+      };
     });
-  }, [activeCalendarDateKey, calendarLogs, user]);
+  }, [activeCalendarDateKey, calendarLogs, sortedMemberIds]);
 
   const isDayNextDisabled = dayOffset >= 0;
   const isMonthNextDisabled = monthOffset >= 0;
@@ -745,7 +859,7 @@ export default function Home() {
 
           <section className={SECTION_CARD_CLASS}>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800">集計（人別）</h2>
+              <h2 className="font-semibold text-slate-800 dark:text-slate-100">集計（人別）</h2>
               <Link
                 href="/analytics"
                 className={CHIP_BUTTON_CLASS}
@@ -756,7 +870,7 @@ export default function Home() {
 
             <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/40 dark:bg-blue-900/20">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">日付の飲酒量</h3>
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-200">日付の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setDayOffset((prev) => prev - 1)}
@@ -790,11 +904,11 @@ export default function Home() {
                     key={`day-${memberUserId}`}
                     className="rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60"
                   >
-                    <p className="text-xs font-semibold text-blue-700">
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-200">
                       {formatMemberName(memberUserId)}
                     </p>
-                    <p className="text-2xl font-bold text-slate-800">{stat.day}杯</p>
-                    <p className="text-sm text-slate-600">
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stat.day}杯</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
                       ¥{(stat.day * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
                   </div>
@@ -804,7 +918,7 @@ export default function Home() {
 
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/20">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">月の飲酒量</h3>
+                <h3 className="text-sm font-semibold text-indigo-700 dark:text-indigo-200">月の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <button
                     onClick={() => setMonthOffset((prev) => prev - 1)}
@@ -838,11 +952,11 @@ export default function Home() {
                     key={`month-${memberUserId}`}
                     className="rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60"
                   >
-                    <p className="text-xs font-semibold text-indigo-700">
+                    <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-200">
                       {formatMemberName(memberUserId)}
                     </p>
-                    <p className="text-2xl font-bold text-slate-800">{stat.month}杯</p>
-                    <p className="text-sm text-slate-600">
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stat.month}杯</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
                       ¥{(stat.month * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
                   </div>
@@ -857,7 +971,7 @@ export default function Home() {
 
           <section className={SECTION_CARD_CLASS}>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800">カレンダー</h2>
+              <h2 className="font-semibold text-slate-800 dark:text-slate-100">カレンダー</h2>
               <div className="flex items-center gap-2 text-sm">
                 <button
                   onClick={() => setCalendarMonthOffset((prev) => prev - 1)}
@@ -909,8 +1023,17 @@ export default function Home() {
                   >
                     <div className="text-slate-700 dark:text-slate-200">{day}</div>
                     <div className="mt-1 flex items-center justify-center gap-1">
-                      {marker?.self && <span className="h-2 w-2 rounded-full bg-red-500" />}
-                      {marker?.other && <span className="h-2 w-2 rounded-full bg-blue-500" />}
+                      {(marker ?? []).slice(0, 3).map((memberId) => (
+                        <span
+                          key={`${dateKey}-${memberId}`}
+                          className={`h-2 w-2 rounded-full ${memberColorMap.get(memberId) ?? "bg-slate-400"}`}
+                        />
+                      ))}
+                      {(marker?.length ?? 0) > 3 && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-300">
+                          +{(marker?.length ?? 0) - 3}
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
@@ -925,17 +1048,30 @@ export default function Home() {
                 <p className="text-sm text-slate-500">この日の記録はありません。</p>
               ) : (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {selectedDayStats.map(([memberUserId, count]) => (
+                  {selectedDayStats.map((entry) => (
                     <div
-                      key={`calendar-summary-${memberUserId}`}
+                      key={`calendar-summary-${entry.memberId}`}
                       className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800"
                     >
-                      <p className="text-xs font-semibold text-slate-700">
-                        {formatMemberName(memberUserId)}
+                      <p className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        <span>{formatMemberName(entry.memberId)}</span>
+                        <span
+                          className={`h-2 w-2 rounded-full ${memberColorMap.get(entry.memberId) ?? "bg-slate-400"}`}
+                        />
                       </p>
-                      <p className="text-lg font-bold text-slate-800">{count}杯</p>
-                      <p className="text-xs text-slate-600">
-                        ¥{(count * SAVINGS_PER_DRINK).toLocaleString()}
+                      <p className="text-xs text-slate-700 dark:text-slate-200">
+                        <span className="text-base font-bold text-slate-800 dark:text-slate-100">
+                          {entry.count}杯
+                        </span>
+                        {" / "}
+                        <span className="font-semibold">
+                          ¥{entry.amount.toLocaleString()}
+                        </span>
+                        {entry.breakdownText && (
+                          <span className="ml-2 text-[11px] text-slate-500 dark:text-slate-300">
+                            {entry.breakdownText}
+                          </span>
+                        )}
                       </p>
                     </div>
                   ))}
@@ -1000,8 +1136,8 @@ export default function Home() {
                     アカウント
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-slate-700">
-                      {displayNameInput.trim() || user.email || "(未設定)"}
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                      {user.email || "(未設定)"}
                     </p>
                     <button
                       onClick={handleSignOut}

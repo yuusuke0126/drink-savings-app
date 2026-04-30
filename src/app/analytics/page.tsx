@@ -258,7 +258,7 @@ export default function AnalyticsPage() {
             <select
               value={selectedUserId}
               onChange={(event) => setSelectedUserId(event.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
+              className="h-10 w-full rounded border px-3 py-2 text-sm leading-5"
             >
               {memberOptions.map((memberUserId) => (
                 <option key={memberUserId} value={memberUserId}>
@@ -275,7 +275,7 @@ export default function AnalyticsPage() {
               type="month"
               value={monthInput}
               onChange={(event) => setMonthInput(event.target.value)}
-              className="w-full rounded border px-3 py-2 text-sm"
+              className="h-10 w-full rounded border px-3 py-2 text-sm leading-5"
             />
           </div>
         </div>
@@ -302,6 +302,16 @@ export default function AnalyticsPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="rounded border p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700">合計</p>
+          <p className="text-sm font-semibold text-slate-700">
+            {selectedUserLogs.length}杯 / ¥
+            {(selectedUserLogs.length * SAVINGS_PER_DRINK).toLocaleString()}
+          </p>
+        </div>
       </section>
 
       {message && (
