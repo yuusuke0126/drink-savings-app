@@ -54,12 +54,12 @@ function isSameMonthInLocal(date: Date, target: Date) {
   );
 }
 
-function formatDrinkLabel(log: DrinkLog) {
-  if (log.drink_type === "other" && log.custom_drink_name) {
-    return `その他 (${log.custom_drink_name})`;
+function getDrinkDisplayName(drinkType: DrinkType, customDrinkName?: string) {
+  if (drinkType === "other" && customDrinkName?.trim()) {
+    return `その他 (${customDrinkName.trim()})`;
   }
-  const found = DRINKS.find((d) => d.key === log.drink_type);
-  return found?.label ?? log.drink_type;
+  const found = DRINKS.find((d) => d.key === drinkType);
+  return found?.label ?? drinkType;
 }
 
 function getDrinkEmoji(drinkType: string) {
@@ -339,8 +339,11 @@ export default function Home() {
     if (error) {
       setMessage(`記録失敗: ${error.message}`);
     } else if (data) {
+      const createdAt = (data as DrinkLog).created_at;
       setLogs((current) => [data as DrinkLog, ...current]);
-      setMessage("1杯を記録しました。");
+      setMessage(
+        `${getDrinkDisplayName(drinkType, customDrinkName)}を記録しました。${formatHistoryDate(createdAt)}`,
+      );
       if (drinkType === "other") {
         setOtherDrinkName("");
         setIsOtherInputOpen(false);
@@ -554,7 +557,7 @@ export default function Home() {
               </button>
             </div>
 
-            <h2 className="mb-3 font-semibold">1杯記録</h2>
+            <h2 className="mb-3 font-semibold">飲酒記録</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DRINKS.map((drink) => (
                 <button
@@ -597,10 +600,10 @@ export default function Home() {
             )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm">
+          <section className="rounded border border-slate-200 bg-slate-50/70 p-4">
             <h2 className="mb-4 font-semibold text-slate-800">集計（人別）</h2>
 
-            <div className="mb-4 rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+            <div className="mb-4 rounded-xl border border-blue-100 bg-slate-50 p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-blue-700">日付の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
@@ -648,7 +651,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-indigo-100 bg-white p-3 shadow-sm">
+            <div className="rounded-xl border border-indigo-100 bg-slate-50 p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-indigo-700">月の飲酒量</h3>
                 <div className="flex items-center gap-2 text-sm">
@@ -722,8 +725,8 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-gray-800 dark:text-gray-100">
-                      {getDrinkEmoji(log.drink_type)} {formatDrinkLabel(log)} ·{" "}
-                      {formatMemberName(log.user_id)} · {formatHistoryDate(log.created_at)}
+                      {getDrinkEmoji(log.drink_type)} {formatMemberName(log.user_id)} ·{" "}
+                      {formatHistoryDate(log.created_at)}
                     </span>
                     <button
                       onClick={() => handleDeleteLog(log)}

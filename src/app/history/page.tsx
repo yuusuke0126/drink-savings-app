@@ -41,21 +41,6 @@ function getDrinkEmoji(drinkType: string) {
   }
 }
 
-function formatDrinkLabel(log: DrinkLog) {
-  if (log.drink_type === "other" && log.custom_drink_name) {
-    return `その他 (${log.custom_drink_name})`;
-  }
-  const labelMap: Record<string, string> = {
-    beer: "ビール",
-    whisky: "ウイスキー",
-    wine: "ワイン",
-    sake: "日本酒",
-    shochu: "焼酎",
-    other: "その他",
-  };
-  return labelMap[log.drink_type] ?? log.drink_type;
-}
-
 function formatHistoryDate(value: string) {
   return new Date(value).toLocaleString("ja-JP", {
     month: "2-digit",
@@ -315,8 +300,8 @@ export default function HistoryPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-gray-800 dark:text-gray-100">
-                  {getDrinkEmoji(log.drink_type)} {formatDrinkLabel(log)} ·{" "}
-                  {formatMemberName(log.user_id)} · {formatHistoryDate(log.created_at)}
+                  {getDrinkEmoji(log.drink_type)} {formatMemberName(log.user_id)} ·{" "}
+                  {formatHistoryDate(log.created_at)}
                 </span>
                 <button
                   onClick={() => handleDeleteLog(log)}
