@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { DrinkGlyph } from "@/components/DrinkGlyph";
+import {
+  drankOnDiffersFromRegisteredDay,
+  formatDrankOnLabel,
+  formatLogRegisteredAt,
+} from "@/lib/drinkShared";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type DrinkLog = {
@@ -26,16 +31,6 @@ const PAGE_SIZE = 20;
 
 function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
-}
-
-function formatHistoryDate(value: string) {
-  return new Date(value).toLocaleString("ja-JP", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 export default function HistoryPage() {
@@ -288,16 +283,23 @@ export default function HistoryPage() {
               key={log.id}
               className="rounded border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900/40"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-gray-800 dark:text-gray-100">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1 text-sm text-gray-800 dark:text-gray-100">
                   <DrinkGlyph drinkType={log.drink_type} />{" "}
-                  {formatMemberName(log.user_id)} · 飲酒日{" "}
-                  {log.drank_on} · 登録 {formatHistoryDate(log.created_at)}
-                </span>
+                  {formatMemberName(log.user_id)} ·{" "}
+                  {formatLogRegisteredAt(log.created_at)}
+                  {drankOnDiffersFromRegisteredDay(
+                    log.drank_on,
+                    log.created_at,
+                  )
+                    ? `（飲酒日：${formatDrankOnLabel(log.drank_on)}）`
+                    : ""}
+                </div>
                 <button
+                  type="button"
                   onClick={() => handleDeleteLog(log)}
                   disabled={isDeleting || log.user_id !== user.id}
-                  className="shrink-0 whitespace-nowrap rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-700 dark:text-red-300"
+                  className="shrink-0 self-center whitespace-nowrap rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-700 dark:text-red-300"
                 >
                   削除
                 </button>

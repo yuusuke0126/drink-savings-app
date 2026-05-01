@@ -12,8 +12,11 @@ import {
   DRINKS,
   type DrinkLog,
   type DrinkType,
+  drankOnDiffersFromRegisteredDay,
+  formatDrankOnLabel,
   formatHistoryDate,
   formatLocalYmd,
+  formatLogRegisteredAt,
   getDrinkDisplayName,
   isErrorMessage,
   logInCalendarMonth,
@@ -1135,16 +1138,23 @@ export default function Home() {
                   key={log.id}
                   className="rounded border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900/40"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-gray-800 dark:text-gray-100">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 text-sm text-gray-800 dark:text-gray-100">
                       <DrinkGlyph drinkType={log.drink_type} />{" "}
                       {formatMemberName(log.user_id)} ·{" "}
-                      {formatHistoryDate(log.created_at)}
-                    </span>
+                      {formatLogRegisteredAt(log.created_at)}
+                      {drankOnDiffersFromRegisteredDay(
+                        log.drank_on,
+                        log.created_at,
+                      )
+                        ? `（飲酒日：${formatDrankOnLabel(log.drank_on)}）`
+                        : ""}
+                    </div>
                     <button
+                      type="button"
                       onClick={() => handleDeleteLog(log)}
                       disabled={isSubmitting || log.user_id !== user.id}
-                      className="shrink-0 whitespace-nowrap rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-700 dark:text-red-300"
+                      className="shrink-0 self-center whitespace-nowrap rounded border border-red-300 px-2 py-1 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-700 dark:text-red-300"
                     >
                       削除
                     </button>

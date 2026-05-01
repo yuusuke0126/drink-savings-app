@@ -94,6 +94,53 @@ export function formatHistoryDate(value: string) {
   });
 }
 
+const startOfLocalDay = (d: Date) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+/** Log line: registration time; omit year if within one year before today (real local calendar). */
+export function formatLogRegisteredAt(createdAt: string): string {
+  const d = new Date(createdAt);
+  const today = new Date();
+  const oneYearAgoStart = startOfLocalDay(today);
+  oneYearAgoStart.setFullYear(oneYearAgoStart.getFullYear() - 1);
+  const needYear = d < oneYearAgoStart;
+  return d.toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    ...(needYear ? { year: "numeric" } : {}),
+  });
+}
+
+/** True when 飲酒日 differs from the local calendar day of registration (backdated entry). */
+export function drankOnDiffersFromRegisteredDay(
+  drankOn: string,
+  createdAt: string,
+): boolean {
+  return drankOn !== formatLocalYmd(new Date(createdAt));
+}
+
+/** Compact date for （飲酒日：…）; omit year if drank_on is on/after the same rolling boundary as formatLogRegisteredAt. */
+export function formatDrankOnLabel(drankOn: string): string {
+  const parts = drankOn.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const day = parts[2];
+  if (!y || !m || !day) return drankOn;
+  const dt = new Date(y, m - 1, day);
+  const today = new Date();
+  const oneYearAgoStart = startOfLocalDay(today);
+  oneYearAgoStart.setFullYear(oneYearAgoStart.getFullYear() - 1);
+  const needYear = dt < oneYearAgoStart;
+  return dt.toLocaleDateString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    ...(needYear ? { year: "numeric" } : {}),
+  });
+}
+
 export function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
 }
