@@ -54,13 +54,6 @@ export function formatLocalYmd(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function addDaysToYmd(ymd: string, days: number) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const next = new Date(y, m - 1, d);
-  next.setDate(next.getDate() + days);
-  return formatLocalYmd(next);
-}
-
 export function getDrinkDisplayName(
   drinkType: DrinkType,
   customDrinkName?: string,
@@ -120,37 +113,6 @@ export function formatDrinkBreakdown(
     return `${breakdownParts.slice(0, maxParts).join(" ")} …`;
   }
   return breakdownParts.join(" ");
-}
-
-/** Summary fetch: day band and month band in local calendar (drank_on). */
-export function getSummaryDrankOnFilter(dayOffset: number, monthOffset: number) {
-  const todayTarget = new Date();
-  todayTarget.setDate(todayTarget.getDate() + dayOffset);
-  const dayStartStr = formatLocalYmd(todayTarget);
-  const dayEndStr = addDaysToYmd(dayStartStr, 1);
-
-  const monthTarget = new Date();
-  monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
-  const monthStartStr = formatLocalYmd(
-    new Date(monthTarget.getFullYear(), monthTarget.getMonth(), 1),
-  );
-  const monthEndStr = formatLocalYmd(
-    new Date(monthTarget.getFullYear(), monthTarget.getMonth() + 1, 1),
-  );
-
-  return { dayStartStr, dayEndStr, monthStartStr, monthEndStr };
-}
-
-export function logMatchesSummaryBands(
-  drankOn: string,
-  dayStartStr: string,
-  dayEndStr: string,
-  monthStartStr: string,
-  monthEndStr: string,
-) {
-  const inDay = drankOn >= dayStartStr && drankOn < dayEndStr;
-  const inMonth = drankOn >= monthStartStr && drankOn < monthEndStr;
-  return inDay || inMonth;
 }
 
 export function logInCalendarMonth(

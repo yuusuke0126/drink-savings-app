@@ -15,10 +15,8 @@ import {
   formatLocalYmd,
   getDrinkDisplayName,
   getDrinkEmoji,
-  getSummaryDrankOnFilter,
   isErrorMessage,
   logInCalendarMonth,
-  logMatchesSummaryBands,
   MEMBER_COLOR_CLASSES,
   OUTLINE_BUTTON_CLASS,
   SECTION_CARD_CLASS,
@@ -33,14 +31,58 @@ type UserProfile = {
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
+/** First scope: at most this many "other" members on the right (excluding self). */
+const MAX_OTHER_MEMBERS_IN_SUMMARY = 2;
+
+function aggregateLogsByUser(
+  logs: DrinkLog[],
+  memberIds: string[],
+): Map<
+  string,
+  { count: number; breakdown: Map<DrinkType, number> }
+> {
+  const createEmptyBreakdown = () => {
+    const breakdown = new Map<DrinkType, number>();
+    DRINKS.forEach((drink) => {
+      breakdown.set(drink.key, 0);
+    });
+    return breakdown;
+  };
+
+  const map = new Map<
+    string,
+    { count: number; breakdown: Map<DrinkType, number> }
+  >();
+  for (const memberId of memberIds) {
+    map.set(memberId, { count: 0, breakdown: createEmptyBreakdown() });
+  }
+
+  for (const log of logs) {
+    const stat = map.get(log.user_id) ?? {
+      count: 0,
+      breakdown: createEmptyBreakdown(),
+    };
+    const drinkType = log.drink_type as DrinkType;
+    stat.count += 1;
+    if (DRINK_ORDER.has(drinkType)) {
+      stat.breakdown.set(
+        drinkType,
+        (stat.breakdown.get(drinkType) ?? 0) + 1,
+      );
+    }
+    map.set(log.user_id, stat);
+  }
+  return map;
+}
+
 export default function Home() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [logs, setLogs] = useState<DrinkLog[]>([]);
-  const [summaryLogs, setSummaryLogs] = useState<DrinkLog[]>([]);
-  const [calendarLogs, setCalendarLogs] = useState<DrinkLog[]>([]);
+  const [todayLogs, setTodayLogs] = useState<DrinkLog[]>([]);
+  const [monthLogs, setMonthLogs] = useState<DrinkLog[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtherInputOpen, setIsOtherInputOpen] = useState(false);
@@ -51,9 +93,7 @@ export default function Home() {
   const [isHouseholdSettingsOpen, setIsHouseholdSettingsOpen] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
-  const [dayOffset, setDayOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
-  const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState("");
   const [message, setMessage] = useState(
     supabase
@@ -75,8 +115,8 @@ export default function Home() {
       setUser(session?.user ?? null);
       if (!session?.user) {
         setLogs([]);
-        setSummaryLogs([]);
-        setCalendarLogs([]);
+        setTodayLogs([]);
+        setMonthLogs([]);
         setHouseholdMemberIds([]);
         setProfileMap({});
       }
@@ -111,44 +151,41 @@ export default function Home() {
   useEffect(() => {
     if (!supabase || !user || !householdId) return;
 
-    const { dayStartStr, dayEndStr, monthStartStr, monthEndStr } =
-      getSummaryDrankOnFilter(dayOffset, monthOffset);
+    const todayStr = formatLocalYmd(new Date());
 
-    const fetchSummaryLogs = async () => {
+    const fetchTodayLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
         .select(
           "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
         )
         .eq("household_id", householdId)
-        .or(
-          `and(drank_on.gte.${dayStartStr},drank_on.lt.${dayEndStr}),and(drank_on.gte.${monthStartStr},drank_on.lt.${monthEndStr})`,
-        )
+        .eq("drank_on", todayStr)
         .order("created_at", { ascending: false });
 
       if (error) {
-        setMessage(`集計用ログ取得エラー: ${error.message}`);
+        setMessage(`今日の記録取得エラー: ${error.message}`);
         return;
       }
-      setSummaryLogs((data as DrinkLog[]) ?? []);
+      setTodayLogs((data as DrinkLog[]) ?? []);
     };
 
-    void fetchSummaryLogs();
-  }, [dayOffset, householdId, monthOffset, supabase, user]);
+    void fetchTodayLogs();
+  }, [householdId, supabase, user]);
 
   useEffect(() => {
     if (!supabase || !user || !householdId) return;
 
-    const calendarMonth = new Date();
-    calendarMonth.setMonth(calendarMonth.getMonth() + calendarMonthOffset);
+    const displayMonth = new Date();
+    displayMonth.setMonth(displayMonth.getMonth() + monthOffset);
     const monthStartStr = formatLocalYmd(
-      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1),
+      new Date(displayMonth.getFullYear(), displayMonth.getMonth(), 1),
     );
     const monthEndStr = formatLocalYmd(
-      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1),
+      new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1),
     );
 
-    const fetchCalendarLogs = async () => {
+    const fetchMonthLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
         .select(
@@ -160,18 +197,24 @@ export default function Home() {
         .order("created_at", { ascending: false });
 
       if (error) {
-        setMessage(`カレンダー取得エラー: ${error.message}`);
+        setMessage(`表示月の記録取得エラー: ${error.message}`);
         return;
       }
-      setCalendarLogs((data as DrinkLog[]) ?? []);
+      setMonthLogs((data as DrinkLog[]) ?? []);
     };
 
-    void fetchCalendarLogs();
-  }, [calendarMonthOffset, householdId, supabase, user]);
+    void fetchMonthLogs();
+  }, [householdId, monthOffset, supabase, user]);
 
   useEffect(() => {
-    setSelectedCalendarDate("");
-  }, [calendarMonthOffset]);
+    const displayMonth = new Date();
+    displayMonth.setMonth(displayMonth.getMonth() + monthOffset);
+    setSelectedCalendarDate(
+      formatLocalYmd(
+        new Date(displayMonth.getFullYear(), displayMonth.getMonth(), 1),
+      ),
+    );
+  }, [monthOffset]);
 
   useEffect(() => {
     if (!supabase || !user || !householdId) return;
@@ -242,8 +285,8 @@ export default function Home() {
         new Set([
           ...householdMemberIds,
           ...logs.map((log) => log.user_id),
-          ...summaryLogs.map((log) => log.user_id),
-          ...calendarLogs.map((log) => log.user_id),
+          ...todayLogs.map((log) => log.user_id),
+          ...monthLogs.map((log) => log.user_id),
         ]),
       );
       if (!userIds.includes(user.id)) userIds.push(user.id);
@@ -268,116 +311,42 @@ export default function Home() {
 
     void loadVisibleProfiles();
   }, [
-    calendarLogs,
     householdId,
     householdMemberIds,
     logs,
-    summaryLogs,
+    monthLogs,
     supabase,
+    todayLogs,
     user,
   ]);
 
-  const userStats = useMemo(() => {
-    const { dayStartStr, dayEndStr, monthStartStr, monthEndStr } =
-      getSummaryDrankOnFilter(dayOffset, monthOffset);
-
-    const createEmptyBreakdown = () => {
-      const breakdown = new Map<DrinkType, number>();
-      DRINKS.forEach((drink) => {
-        breakdown.set(drink.key, 0);
-      });
-      return breakdown;
-    };
-
-    const map = new Map<
-      string,
-      {
-        day: number;
-        month: number;
-        dayBreakdown: Map<DrinkType, number>;
-        monthBreakdown: Map<DrinkType, number>;
-      }
-    >();
-
-    for (const memberId of householdMemberIds) {
-      map.set(memberId, {
-        day: 0,
-        month: 0,
-        dayBreakdown: createEmptyBreakdown(),
-        monthBreakdown: createEmptyBreakdown(),
-      });
-    }
-
-    for (const log of summaryLogs) {
-      const stat = map.get(log.user_id) ?? {
-        day: 0,
-        month: 0,
-        dayBreakdown: createEmptyBreakdown(),
-        monthBreakdown: createEmptyBreakdown(),
-      };
-      const drinkType = log.drink_type as DrinkType;
-      const drankOn = log.drank_on;
-      if (drankOn >= dayStartStr && drankOn < dayEndStr) {
-        stat.day += 1;
-        if (DRINK_ORDER.has(drinkType)) {
-          stat.dayBreakdown.set(
-            drinkType,
-            (stat.dayBreakdown.get(drinkType) ?? 0) + 1,
-          );
-        }
-      }
-      if (drankOn >= monthStartStr && drankOn < monthEndStr) {
-        stat.month += 1;
-        if (DRINK_ORDER.has(drinkType)) {
-          stat.monthBreakdown.set(
-            drinkType,
-            (stat.monthBreakdown.get(drinkType) ?? 0) + 1,
-          );
-        }
-      }
-      map.set(log.user_id, stat);
-    }
-
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (!user) return a.localeCompare(b);
-      if (a === user.id) return -1;
-      if (b === user.id) return 1;
-      return a.localeCompare(b);
-    });
-  }, [dayOffset, householdMemberIds, monthOffset, summaryLogs, user]);
-
-  const dayLabel = useMemo(() => {
-    const target = new Date();
-    target.setDate(target.getDate() + dayOffset);
-    return target.toLocaleDateString("ja-JP", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      weekday: "short",
-    });
-  }, [dayOffset]);
-
-  const monthLabel = useMemo(() => {
-    const target = new Date();
-    target.setMonth(target.getMonth() + monthOffset);
-    return `${target.getFullYear()}年${target.getMonth() + 1}月`;
+  const displayMonthDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + monthOffset);
+    return new Date(d.getFullYear(), d.getMonth(), 1);
   }, [monthOffset]);
 
-  const calendarMonthDate = useMemo(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() + calendarMonthOffset);
-    return date;
-  }, [calendarMonthOffset]);
+  const displayYear = displayMonthDate.getFullYear();
+  const displayMonthNum = displayMonthDate.getMonth() + 1;
 
-  const calendarMonthLabel = useMemo(
+  const todayLabel = useMemo(
     () =>
-      `${calendarMonthDate.getFullYear()}年${calendarMonthDate.getMonth() + 1}月`,
-    [calendarMonthDate],
+      new Date().toLocaleDateString("ja-JP", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        weekday: "short",
+      }),
+    [],
   );
 
   const sortedMemberIds = useMemo(() => {
     const ids = Array.from(
-      new Set([...householdMemberIds, ...calendarLogs.map((log) => log.user_id)]),
+      new Set([
+        ...householdMemberIds,
+        ...monthLogs.map((log) => log.user_id),
+        ...todayLogs.map((log) => log.user_id),
+      ]),
     );
     if (user?.id && !ids.includes(user.id)) ids.push(user.id);
     return ids.sort((a, b) => {
@@ -386,7 +355,26 @@ export default function Home() {
       if (b === user.id) return 1;
       return a.localeCompare(b);
     });
-  }, [calendarLogs, householdMemberIds, user]);
+  }, [householdMemberIds, monthLogs, todayLogs, user]);
+
+  const summaryMemberIds = useMemo(() => {
+    if (!user) return sortedMemberIds;
+    const others = householdMemberIds
+      .filter((id) => id !== user.id)
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, MAX_OTHER_MEMBERS_IN_SUMMARY);
+    return [user.id, ...others];
+  }, [householdMemberIds, sortedMemberIds, user]);
+
+  const todayBandStats = useMemo(
+    () => aggregateLogsByUser(todayLogs, summaryMemberIds),
+    [summaryMemberIds, todayLogs],
+  );
+
+  const monthBandStats = useMemo(
+    () => aggregateLogsByUser(monthLogs, summaryMemberIds),
+    [monthLogs, summaryMemberIds],
+  );
 
   const memberColorMap = useMemo(() => {
     const colorMap = new Map<string, string>();
@@ -398,7 +386,7 @@ export default function Home() {
 
   const calendarDateMarkers = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    for (const log of calendarLogs) {
+    for (const log of monthLogs) {
       const key = log.drank_on;
       const current = map.get(key) ?? new Set<string>();
       current.add(log.user_id);
@@ -419,11 +407,11 @@ export default function Home() {
       sortedMap.set(key, ids);
     }
     return sortedMap;
-  }, [calendarLogs, sortedMemberIds]);
+  }, [monthLogs, sortedMemberIds]);
 
   const calendarGrid = useMemo(() => {
-    const year = calendarMonthDate.getFullYear();
-    const month = calendarMonthDate.getMonth();
+    const year = displayMonthDate.getFullYear();
+    const month = displayMonthDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const cells: Array<number | null> = [];
@@ -431,33 +419,20 @@ export default function Home() {
     for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
     while (cells.length % 7 !== 0) cells.push(null);
     return cells;
-  }, [calendarMonthDate]);
+  }, [displayMonthDate]);
 
-  const defaultCalendarDateKey = useMemo(() => {
-    const today = new Date();
-    const monthDate = new Date(
-      calendarMonthDate.getFullYear(),
-      calendarMonthDate.getMonth(),
-      1,
-    );
-    const selectedDefault = new Date(
-      monthDate.getFullYear(),
-      monthDate.getMonth(),
-      monthDate.getMonth() === today.getMonth() &&
-        monthDate.getFullYear() === today.getFullYear()
-        ? today.getDate()
-        : 1,
-    );
-    return formatLocalYmd(selectedDefault);
-  }, [calendarMonthDate]);
+  const defaultCalendarDateKey = useMemo(
+    () => formatLocalYmd(displayMonthDate),
+    [displayMonthDate],
+  );
 
   const activeCalendarDateKey = useMemo(() => {
-    const monthPrefix = `${calendarMonthDate.getFullYear()}-${`${calendarMonthDate.getMonth() + 1}`.padStart(2, "0")}-`;
+    const monthPrefix = `${displayMonthDate.getFullYear()}-${`${displayMonthDate.getMonth() + 1}`.padStart(2, "0")}-`;
     if (selectedCalendarDate.startsWith(monthPrefix)) {
       return selectedCalendarDate;
     }
     return defaultCalendarDateKey;
-  }, [calendarMonthDate, defaultCalendarDateKey, selectedCalendarDate]);
+  }, [defaultCalendarDateKey, displayMonthDate, selectedCalendarDate]);
 
   const selectedDayStats = useMemo(() => {
     if (sortedMemberIds.length === 0) return [];
@@ -473,7 +448,7 @@ export default function Home() {
       breakdownMap.set(memberId, memberDrinkMap);
     }
 
-    for (const log of calendarLogs) {
+    for (const log of monthLogs) {
       if (log.drank_on !== activeCalendarDateKey) continue;
       if (!countMap.has(log.user_id)) continue;
       countMap.set(log.user_id, (countMap.get(log.user_id) ?? 0) + 1);
@@ -487,7 +462,8 @@ export default function Home() {
     return sortedMemberIds.map((memberId) => {
       const count = countMap.get(memberId) ?? 0;
       const memberDrinkMap = breakdownMap.get(memberId) ?? new Map<DrinkType, number>();
-      const breakdownText = formatDrinkBreakdown(memberDrinkMap);
+      const breakdownText =
+        user && memberId === user.id ? formatDrinkBreakdown(memberDrinkMap) : "";
 
       return {
         memberId,
@@ -496,13 +472,10 @@ export default function Home() {
         breakdownText,
       };
     });
-  }, [activeCalendarDateKey, calendarLogs, sortedMemberIds]);
+  }, [activeCalendarDateKey, monthLogs, sortedMemberIds, user]);
 
-  const isDayNextDisabled = dayOffset >= 0;
   const isMonthNextDisabled = monthOffset >= 0;
-  const isDayResetDisabled = dayOffset === 0;
   const isMonthResetDisabled = monthOffset === 0;
-  const isCalendarMonthNextDisabled = calendarMonthOffset >= 0;
 
   const formatMemberName = (memberUserId: string) => {
     const configuredName = profileMap[memberUserId]?.display_name?.trim();
@@ -585,24 +558,15 @@ export default function Home() {
       const createdAt = row.created_at;
       setLogs((current) => [row, ...current].slice(0, 10));
 
-      const { dayStartStr, dayEndStr, monthStartStr, monthEndStr } =
-        getSummaryDrankOnFilter(dayOffset, monthOffset);
-      if (
-        logMatchesSummaryBands(
-          row.drank_on,
-          dayStartStr,
-          dayEndStr,
-          monthStartStr,
-          monthEndStr,
-        )
-      ) {
-        setSummaryLogs((prev) => [row, ...prev]);
+      const todayStr = formatLocalYmd(new Date());
+      if (row.drank_on === todayStr) {
+        setTodayLogs((prev) => [row, ...prev]);
       }
 
-      const calendarMonth = new Date();
-      calendarMonth.setMonth(calendarMonth.getMonth() + calendarMonthOffset);
-      if (logInCalendarMonth(row.drank_on, calendarMonth)) {
-        setCalendarLogs((prev) => [row, ...prev]);
+      const calMonth = new Date();
+      calMonth.setMonth(calMonth.getMonth() + monthOffset);
+      if (logInCalendarMonth(row.drank_on, calMonth)) {
+        setMonthLogs((prev) => [row, ...prev]);
       }
 
       setMessage(
@@ -747,8 +711,8 @@ export default function Home() {
       setMessage(`削除失敗: ${error.message}`);
     } else {
       setLogs((current) => current.filter((item) => item.id !== log.id));
-      setSummaryLogs((current) => current.filter((item) => item.id !== log.id));
-      setCalendarLogs((current) => current.filter((item) => item.id !== log.id));
+      setTodayLogs((current) => current.filter((item) => item.id !== log.id));
+      setMonthLogs((current) => current.filter((item) => item.id !== log.id));
       setMessage("記録を削除しました。");
     }
 
@@ -867,82 +831,105 @@ export default function Home() {
             )}
           </section>
 
-          <section className={SECTION_CARD_CLASS}>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800 dark:text-slate-100">集計（人別）</h2>
-              <Link
-                href="/analytics"
-                className={CHIP_BUTTON_CLASS}
-              >
+          <section className={SECTION_CARD_CLASS} aria-labelledby="home-summary-heading">
+            <h2 id="home-summary-heading" className="sr-only">
+              飲酒量のサマリーとカレンダー
+            </h2>
+            <div className="mb-3 flex justify-end">
+              <Link href="/analytics" className={CHIP_BUTTON_CLASS}>
                 集計詳細
               </Link>
             </div>
 
             <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/40 dark:bg-blue-900/20">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-200">日付の飲酒量</h3>
-                <div className="flex items-center gap-2 text-sm">
-                  <button
-                    onClick={() => setDayOffset((prev) => prev - 1)}
-                    className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
-                  >
-                    ←
-                  </button>
-                  <span className="font-medium text-slate-700 dark:text-slate-200">{dayLabel}</span>
-                  <button
-                    onClick={() => setDayOffset(0)}
-                    disabled={isDayResetDisabled}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  >
-                    今日
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (isDayNextDisabled) return;
-                      setDayOffset((prev) => prev + 1);
-                    }}
-                    disabled={isDayNextDisabled}
-                    className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    →
-                  </button>
-                </div>
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-200">
+                  今日の飲酒量
+                </h3>
+                <p className="text-xs text-blue-600/90 dark:text-blue-300/80">
+                  {todayLabel}（実日の今日）
+                </p>
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {userStats.map(([memberUserId, stat]) => (
-                  <div
-                    key={`day-${memberUserId}`}
-                    className="rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60"
-                  >
+              {user && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                  <div className="flex flex-1 flex-col rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-blue-700 dark:text-blue-200">
-                      {formatMemberName(memberUserId)}
+                      {formatMemberName(user.id)}
                     </p>
-                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stat.day}杯</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                      {(todayBandStats.get(user.id)?.count ?? 0)}杯
+                    </p>
                     <p className="text-sm text-slate-600 dark:text-slate-300">
-                      ¥{(stat.day * SAVINGS_PER_DRINK).toLocaleString()}
+                      ¥
+                      {((todayBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
-                    {stat.day > 0 && (
+                    {(todayBandStats.get(user.id)?.count ?? 0) > 0 && (
                       <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                        {formatDrinkBreakdown(stat.dayBreakdown)}
+                        {formatDrinkBreakdown(
+                          todayBandStats.get(user.id)?.breakdown ?? new Map(),
+                        )}
                       </p>
                     )}
                   </div>
-                ))}
-              </div>
+                  <div className="flex flex-1 flex-col gap-2">
+                    {summaryMemberIds.filter((id) => id !== user.id).length ===
+                      0 && (
+                      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-blue-200/80 bg-white/40 px-2 py-6 text-center text-xs text-slate-500 dark:border-blue-900/50 dark:bg-slate-800/40 dark:text-slate-400">
+                        他メンバーがいません
+                      </div>
+                    )}
+                    {summaryMemberIds
+                      .filter((id) => id !== user.id)
+                      .map((oid) => {
+                        const st = todayBandStats.get(oid) ?? {
+                          count: 0,
+                          breakdown: new Map<DrinkType, number>(),
+                        };
+                        return (
+                          <div
+                            key={`today-other-${oid}`}
+                            className="rounded-lg border border-blue-100/70 bg-white/60 p-3 dark:border-blue-900/30 dark:bg-slate-800/50"
+                          >
+                            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                              {formatMemberName(oid)}
+                            </p>
+                            <p className="text-xl font-semibold text-slate-700 dark:text-slate-200">
+                              {st.count}杯
+                            </p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              ¥{(st.count * SAVINGS_PER_DRINK).toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/20">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-indigo-700 dark:text-indigo-200">月の飲酒量</h3>
-                <div className="flex items-center gap-2 text-sm">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-1 sm:block">
+                  <span className="block text-center text-sm font-semibold text-indigo-800 dark:text-indigo-200 sm:hidden">
+                    {displayYear}年
+                  </span>
+                  <span className="block text-center text-sm font-semibold text-indigo-800 dark:text-indigo-200 sm:hidden">
+                    {displayMonthNum}月の飲酒量
+                  </span>
+                  <span className="hidden text-sm font-semibold text-indigo-800 dark:text-indigo-200 sm:block">
+                    {displayYear}年{displayMonthNum}月の飲酒量
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center justify-center gap-2 sm:justify-end">
                   <button
+                    type="button"
                     onClick={() => setMonthOffset((prev) => prev - 1)}
                     className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
                   >
                     ←
                   </button>
-                  <span className="font-medium text-slate-700 dark:text-slate-200">{monthLabel}</span>
                   <button
+                    type="button"
                     onClick={() => setMonthOffset(0)}
                     disabled={isMonthResetDisabled}
                     className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
@@ -950,6 +937,7 @@ export default function Home() {
                     今月
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       if (isMonthNextDisabled) return;
                       setMonthOffset((prev) => prev + 1);
@@ -961,158 +949,166 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {userStats.map(([memberUserId, stat]) => (
-                  <div
-                    key={`month-${memberUserId}`}
-                    className="rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60"
-                  >
+
+              {user && (
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                  <div className="flex flex-1 flex-col rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-200">
-                      {formatMemberName(memberUserId)}
+                      {formatMemberName(user.id)}
                     </p>
-                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stat.month}杯</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                      {(monthBandStats.get(user.id)?.count ?? 0)}杯
+                    </p>
                     <p className="text-sm text-slate-600 dark:text-slate-300">
-                      ¥{(stat.month * SAVINGS_PER_DRINK).toLocaleString()}
+                      ¥
+                      {((monthBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
-                    {stat.month > 0 && (
+                    {(monthBandStats.get(user.id)?.count ?? 0) > 0 && (
                       <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                        {formatDrinkBreakdown(stat.monthBreakdown)}
+                        {formatDrinkBreakdown(
+                          monthBandStats.get(user.id)?.breakdown ?? new Map(),
+                        )}
                       </p>
                     )}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {userStats.length === 0 && (
-              <p className="mt-3 text-sm text-gray-600">まだ記録がありません。</p>
-            )}
-          </section>
-
-          <section className={SECTION_CARD_CLASS}>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800 dark:text-slate-100">カレンダー</h2>
-              <div className="flex items-center gap-2 text-sm">
-                <button
-                  onClick={() => setCalendarMonthOffset((prev) => prev - 1)}
-                  className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95"
-                >
-                  ←
-                </button>
-                <span className="font-medium text-slate-700 dark:text-slate-200">{calendarMonthLabel}</span>
-                <button
-                  onClick={() => {
-                    if (isCalendarMonthNextDisabled) return;
-                    setCalendarMonthOffset((prev) => prev + 1);
-                  }}
-                  disabled={isCalendarMonthNextDisabled}
-                  className="rounded-full border border-slate-400 bg-slate-100 px-2 py-0.5 text-slate-700 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  →
-                </button>
-                <button
-                  onClick={() => setCalendarMonthOffset(0)}
-                  disabled={calendarMonthOffset === 0}
-                  className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                >
-                  今月
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-600 dark:text-slate-300">
-              {WEEKDAY_LABELS.map((label) => (
-                <div key={label} className="py-1 font-medium">
-                  {label}
+                  <div className="flex flex-1 flex-col gap-2">
+                    {summaryMemberIds.filter((id) => id !== user.id).length ===
+                      0 && (
+                      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-indigo-200/80 bg-white/40 px-2 py-6 text-center text-xs text-slate-500 dark:border-indigo-900/50 dark:bg-slate-800/40 dark:text-slate-400">
+                        他メンバーがいません
+                      </div>
+                    )}
+                    {summaryMemberIds
+                      .filter((id) => id !== user.id)
+                      .map((oid) => {
+                        const st = monthBandStats.get(oid) ?? {
+                          count: 0,
+                          breakdown: new Map<DrinkType, number>(),
+                        };
+                        return (
+                          <div
+                            key={`month-other-${oid}`}
+                            className="rounded-lg border border-indigo-100/70 bg-white/60 p-3 dark:border-indigo-900/30 dark:bg-slate-800/50"
+                          >
+                            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                              {formatMemberName(oid)}
+                            </p>
+                            <p className="text-xl font-semibold text-slate-700 dark:text-slate-200">
+                              {st.count}杯
+                            </p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              ¥{(st.count * SAVINGS_PER_DRINK).toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {calendarGrid.map((day, index) => {
-                if (!day) {
-                  return <div key={`empty-${index}`} className="h-12 rounded-md" />;
-                }
-                const dateKey = `${calendarMonthDate.getFullYear()}-${`${calendarMonthDate.getMonth() + 1}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
-                const marker = calendarDateMarkers.get(dateKey);
-                const isSelected = dateKey === activeCalendarDateKey;
-                return (
-                  <button
-                    key={dateKey}
-                    onClick={() => setSelectedCalendarDate(dateKey)}
-                    className={`h-12 rounded-md border text-xs transition ${
-                      isSelected
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
-                    }`}
-                  >
-                    <div className="text-slate-700 dark:text-slate-200">{day}</div>
-                    <div className="mt-1 flex items-center justify-center gap-1">
-                      {(marker ?? []).slice(0, 3).map((memberId) => (
-                        <span
-                          key={`${dateKey}-${memberId}`}
-                          className={`h-2 w-2 rounded-full ${memberColorMap.get(memberId) ?? "bg-slate-400"}`}
-                        />
-                      ))}
-                      {(marker?.length ?? 0) > 3 && (
-                        <span className="text-[10px] text-slate-500 dark:text-slate-300">
-                          +{(marker?.length ?? 0) - 3}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+              )}
 
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-              <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                {activeCalendarDateKey} のサマリー
-              </p>
-              {selectedDayStats.length === 0 ? (
-                <p className="text-sm text-slate-500">この日の記録はありません。</p>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {selectedDayStats.map((entry) => (
-                    <div
-                      key={`calendar-summary-${entry.memberId}`}
-                      className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800"
-                    >
-                      <p className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                        <span>{formatMemberName(entry.memberId)}</span>
-                        <span
-                          className={`h-2 w-2 rounded-full ${memberColorMap.get(entry.memberId) ?? "bg-slate-400"}`}
-                        />
-                      </p>
-                      <p className="text-xs text-slate-700 dark:text-slate-200">
-                        <span className="text-base font-bold text-slate-800 dark:text-slate-100">
-                          {entry.count}杯
-                        </span>
-                        {" / "}
-                        <span className="font-semibold">
-                          ¥{entry.amount.toLocaleString()}
-                        </span>
-                        {entry.breakdownText && (
-                          <span className="ml-2 text-[11px] text-slate-500 dark:text-slate-300">
-                            {entry.breakdownText}
-                          </span>
-                        )}
-                      </p>
+              <div className="border-t border-indigo-200/40 pt-3 dark:border-indigo-800/40">
+                <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-600 dark:text-slate-300">
+                  {WEEKDAY_LABELS.map((label) => (
+                    <div key={label} className="py-1 font-medium">
+                      {label}
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-            {householdId &&
-              activeCalendarDateKey <= formatLocalYmd(new Date()) && (
-                <div className="mt-3">
-                  <Link
-                    href={`/day/${activeCalendarDateKey}`}
-                    className="inline-flex w-full items-center justify-center rounded-lg border border-blue-500 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 transition hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-100 dark:hover:bg-blue-900/50"
-                  >
-                    この日に追加
-                  </Link>
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarGrid.map((day, index) => {
+                    if (!day) {
+                      return <div key={`empty-${index}`} className="h-12 rounded-md" />;
+                    }
+                    const dateKey = `${displayMonthDate.getFullYear()}-${`${displayMonthDate.getMonth() + 1}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+                    const marker = calendarDateMarkers.get(dateKey);
+                    const isSelected = dateKey === activeCalendarDateKey;
+                    return (
+                      <button
+                        type="button"
+                        key={dateKey}
+                        onClick={() => setSelectedCalendarDate(dateKey)}
+                        className={`h-12 rounded-md border text-xs transition ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-slate-200/90 bg-white/90 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/90 dark:hover:bg-slate-700"
+                        }`}
+                      >
+                        <div className="text-slate-700 dark:text-slate-200">{day}</div>
+                        <div className="mt-1 flex items-center justify-center gap-1">
+                          {(marker ?? []).slice(0, 3).map((memberId) => (
+                            <span
+                              key={`${dateKey}-${memberId}`}
+                              className={`h-2 w-2 rounded-full ${memberColorMap.get(memberId) ?? "bg-slate-400"}`}
+                            />
+                          ))}
+                          {(marker?.length ?? 0) > 3 && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-300">
+                              +{(marker?.length ?? 0) - 3}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+
+                <div className="mt-3 rounded-lg border border-slate-200/80 bg-white/50 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
+                  <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    {activeCalendarDateKey} のサマリー
+                  </p>
+                  {selectedDayStats.length === 0 ? (
+                    <p className="text-sm text-slate-500">この日の記録はありません。</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {selectedDayStats.map((entry) => (
+                        <div
+                          key={`calendar-summary-${entry.memberId}`}
+                          className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800"
+                        >
+                          <p className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            <span>{formatMemberName(entry.memberId)}</span>
+                            <span
+                              className={`h-2 w-2 rounded-full ${memberColorMap.get(entry.memberId) ?? "bg-slate-400"}`}
+                            />
+                          </p>
+                          <p className="text-xs text-slate-700 dark:text-slate-200">
+                            <span className="text-base font-bold text-slate-800 dark:text-slate-100">
+                              {entry.count}杯
+                            </span>
+                            {" / "}
+                            <span className="font-semibold">
+                              ¥{entry.amount.toLocaleString()}
+                            </span>
+                            {entry.breakdownText ? (
+                              <span className="ml-2 text-[11px] text-slate-500 dark:text-slate-300">
+                                {entry.breakdownText}
+                              </span>
+                            ) : null}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {householdId &&
+                  activeCalendarDateKey <= formatLocalYmd(new Date()) && (
+                    <div className="mt-3">
+                      <Link
+                        href={`/day/${activeCalendarDateKey}`}
+                        className="inline-flex w-full items-center justify-center rounded-lg border border-blue-500 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 transition hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-100 dark:hover:bg-blue-900/50"
+                      >
+                        この日に追加
+                      </Link>
+                    </div>
+                  )}
+              </div>
+            </div>
+
+            {summaryMemberIds.length === 0 && (
+              <p className="mt-3 text-sm text-gray-600">
+                世帯メンバーを読み込み中か、未設定です。
+              </p>
+            )}
           </section>
 
           <section className={SECTION_CARD_CLASS}>
