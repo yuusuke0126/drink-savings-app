@@ -995,7 +995,7 @@ export default function Home() {
               )}
 
               <div className="border-t border-indigo-200/40 pt-2 dark:border-indigo-800/40">
-                <div className="mb-2 flex items-center justify-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
                   <button
                     type="button"
                     onClick={() => setMonthOffset((prev) => prev - 1)}
@@ -1003,6 +1003,9 @@ export default function Home() {
                   >
                     ←
                   </button>
+                  <span className="min-w-[5rem] text-center text-sm font-semibold tabular-nums text-indigo-800 dark:text-indigo-200">
+                    {displayYear}年{displayMonthNum}月
+                  </span>
                   <button
                     type="button"
                     onClick={() => setMonthOffset(0)}
