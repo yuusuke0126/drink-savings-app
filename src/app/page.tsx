@@ -732,14 +732,21 @@ export default function Home() {
   const shouldUseHonorific = Boolean(displayNameText);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
-      <div className="flex items-center justify-between gap-2">
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h1 className="text-2xl font-bold">飲酒記録アプリ</h1>
-        {currentUserLabel && (
-          <p className="text-xs text-slate-500">
-            {shouldUseHonorific ? `${currentUserLabel}さん` : currentUserLabel}
-          </p>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {user && (
+            <Link href="/analytics" className={CHIP_BUTTON_CLASS}>
+              集計詳細
+            </Link>
+          )}
+          {currentUserLabel && (
+            <p className="text-xs text-slate-500">
+              {shouldUseHonorific ? `${currentUserLabel}さん` : currentUserLabel}
+            </p>
+          )}
+        </div>
       </div>
 
       {!supabase && (
@@ -792,7 +799,7 @@ export default function Home() {
       ) : (
         <>
           <section className={SECTION_CARD_CLASS}>
-            <h2 className="mb-3 font-semibold">飲酒記録</h2>
+            <h2 className="mb-2 font-semibold">飲酒記録</h2>
             <div className="grid grid-cols-3 gap-2">
               {DRINKS.map((drink) => (
                 <button
@@ -856,24 +863,18 @@ export default function Home() {
             <h2 id="home-summary-heading" className="sr-only">
               飲酒量のサマリーとカレンダー
             </h2>
-            <div className="mb-3 flex justify-end">
-              <Link href="/analytics" className={CHIP_BUTTON_CLASS}>
-                集計詳細
-              </Link>
-            </div>
-
-            <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/40 dark:bg-blue-900/20">
-              <div className="mb-3">
+            <div className="mb-2 rounded-xl border border-blue-100 bg-blue-50/70 p-2 dark:border-blue-900/40 dark:bg-blue-900/20">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                 <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-200">
                   今日の飲酒量
                 </h3>
                 <p className="text-xs text-blue-600/90 dark:text-blue-300/80">
-                  {todayLabel}（実日の今日）
+                  {todayLabel}
                 </p>
               </div>
               {user && (
-                <div className="grid grid-cols-2 gap-3 items-stretch">
-                  <div className="min-w-0 flex flex-col rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60">
+                <div className="grid grid-cols-2 gap-2 items-stretch">
+                  <div className="min-w-0 flex flex-col rounded-lg border border-blue-100 bg-white/80 p-2 dark:border-blue-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-blue-700 dark:text-blue-200">
                       {formatMemberName(user.id)}
                     </p>
@@ -885,7 +886,7 @@ export default function Home() {
                       {((todayBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
                     {(todayBandStats.get(user.id)?.count ?? 0) > 0 && (
-                      <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-300">
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
                         <DrinkBreakdownInline
                           breakdown={
                             todayBandStats.get(user.id)?.breakdown ?? new Map()
@@ -894,10 +895,10 @@ export default function Home() {
                       </p>
                     )}
                   </div>
-                  <div className="min-w-0 flex flex-col gap-2">
+                  <div className="min-w-0 flex flex-col gap-1.5">
                     {summaryMemberIds.filter((id) => id !== user.id).length ===
                       0 && (
-                      <div className="flex min-h-[4.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-blue-200/80 bg-white/40 px-1 py-3 text-center text-[11px] leading-snug text-slate-500 dark:border-blue-900/50 dark:bg-slate-800/40 dark:text-slate-400">
+                      <div className="flex min-h-[3.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-blue-200/80 bg-white/40 px-1 py-2 text-center text-[11px] leading-snug text-slate-500 dark:border-blue-900/50 dark:bg-slate-800/40 dark:text-slate-400">
                         他メンバーがいません
                       </div>
                     )}
@@ -911,7 +912,7 @@ export default function Home() {
                         return (
                           <div
                             key={`today-other-${oid}`}
-                            className="rounded-lg border border-blue-100/70 bg-white/60 p-3 dark:border-blue-900/30 dark:bg-slate-800/50"
+                            className="rounded-lg border border-blue-100/70 bg-white/60 p-2 dark:border-blue-900/30 dark:bg-slate-800/50"
                           >
                             <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
                               {formatMemberName(oid)}
@@ -930,20 +931,71 @@ export default function Home() {
               )}
             </div>
 
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/40 dark:bg-indigo-900/20">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 flex-col gap-1 sm:block">
-                  <span className="block text-center text-sm font-semibold text-indigo-800 dark:text-indigo-200 sm:hidden">
-                    {displayYear}年
-                  </span>
-                  <span className="block text-center text-sm font-semibold text-indigo-800 dark:text-indigo-200 sm:hidden">
-                    {displayMonthNum}月の飲酒量
-                  </span>
-                  <span className="hidden text-sm font-semibold text-indigo-800 dark:text-indigo-200 sm:block">
-                    {displayYear}年{displayMonthNum}月の飲酒量
-                  </span>
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-2 dark:border-indigo-900/40 dark:bg-indigo-900/20">
+              <p className="mb-2 text-sm font-semibold text-indigo-800 dark:text-indigo-200">
+                {displayYear}年{displayMonthNum}月の飲酒量
+              </p>
+
+              {user && (
+                <div className="mb-2 grid grid-cols-2 gap-2 items-stretch">
+                  <div className="min-w-0 flex flex-col rounded-lg border border-indigo-100 bg-white/80 p-2 dark:border-indigo-900/40 dark:bg-slate-800/60">
+                    <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-200">
+                      {formatMemberName(user.id)}
+                    </p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                      {(monthBandStats.get(user.id)?.count ?? 0)}杯
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      ¥
+                      {((monthBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
+                    </p>
+                    {(monthBandStats.get(user.id)?.count ?? 0) > 0 && (
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                        <DrinkBreakdownInline
+                          breakdown={
+                            monthBandStats.get(user.id)?.breakdown ?? new Map()
+                          }
+                        />
+                      </p>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex flex-col gap-1.5">
+                    {summaryMemberIds.filter((id) => id !== user.id).length ===
+                      0 && (
+                      <div className="flex min-h-[3.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-indigo-200/80 bg-white/40 px-1 py-2 text-center text-[11px] leading-snug text-slate-500 dark:border-indigo-900/50 dark:bg-slate-800/40 dark:text-slate-400">
+                        他メンバーがいません
+                      </div>
+                    )}
+                    {summaryMemberIds
+                      .filter((id) => id !== user.id)
+                      .map((oid) => {
+                        const st = monthBandStats.get(oid) ?? {
+                          count: 0,
+                          breakdown: new Map<DrinkType, number>(),
+                        };
+                        return (
+                          <div
+                            key={`month-other-${oid}`}
+                            className="rounded-lg border border-indigo-100/70 bg-white/60 p-2 dark:border-indigo-900/30 dark:bg-slate-800/50"
+                          >
+                            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                              {formatMemberName(oid)}
+                            </p>
+                            <p className="text-xl font-semibold text-slate-700 dark:text-slate-200">
+                              {st.count}杯
+                            </p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              ¥{(st.count * SAVINGS_PER_DRINK).toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center justify-center gap-2 sm:justify-end">
+              )}
+
+              <div className="border-t border-indigo-200/40 pt-2 dark:border-indigo-800/40">
+                <div className="mb-2 flex items-center justify-center gap-2">
                   <button
                     type="button"
                     onClick={() => setMonthOffset((prev) => prev - 1)}
@@ -971,68 +1023,7 @@ export default function Home() {
                     →
                   </button>
                 </div>
-              </div>
-
-              {user && (
-                <div className="mb-4 grid grid-cols-2 gap-3 items-stretch">
-                  <div className="min-w-0 flex flex-col rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60">
-                    <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-200">
-                      {formatMemberName(user.id)}
-                    </p>
-                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                      {(monthBandStats.get(user.id)?.count ?? 0)}杯
-                    </p>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                      ¥
-                      {((monthBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
-                    </p>
-                    {(monthBandStats.get(user.id)?.count ?? 0) > 0 && (
-                      <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-300">
-                        <DrinkBreakdownInline
-                          breakdown={
-                            monthBandStats.get(user.id)?.breakdown ?? new Map()
-                          }
-                        />
-                      </p>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex flex-col gap-2">
-                    {summaryMemberIds.filter((id) => id !== user.id).length ===
-                      0 && (
-                      <div className="flex min-h-[4.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-indigo-200/80 bg-white/40 px-1 py-3 text-center text-[11px] leading-snug text-slate-500 dark:border-indigo-900/50 dark:bg-slate-800/40 dark:text-slate-400">
-                        他メンバーがいません
-                      </div>
-                    )}
-                    {summaryMemberIds
-                      .filter((id) => id !== user.id)
-                      .map((oid) => {
-                        const st = monthBandStats.get(oid) ?? {
-                          count: 0,
-                          breakdown: new Map<DrinkType, number>(),
-                        };
-                        return (
-                          <div
-                            key={`month-other-${oid}`}
-                            className="rounded-lg border border-indigo-100/70 bg-white/60 p-3 dark:border-indigo-900/30 dark:bg-slate-800/50"
-                          >
-                            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                              {formatMemberName(oid)}
-                            </p>
-                            <p className="text-xl font-semibold text-slate-700 dark:text-slate-200">
-                              {st.count}杯
-                            </p>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                              ¥{(st.count * SAVINGS_PER_DRINK).toLocaleString()}
-                            </p>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
-
-              <div className="border-t border-indigo-200/40 pt-3 dark:border-indigo-800/40">
-                <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-600 dark:text-slate-300">
+                <div className="mb-1.5 grid grid-cols-7 gap-1 text-center text-xs text-slate-600 dark:text-slate-300">
                   {WEEKDAY_LABELS.map((label) => (
                     <div key={label} className="py-1 font-medium">
                       {label}
@@ -1077,14 +1068,14 @@ export default function Home() {
                   })}
                 </div>
 
-                <div className="mt-3 rounded-lg border border-slate-200/80 bg-white/50 p-3 dark:border-slate-700/80 dark:bg-slate-800/40">
-                  <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <div className="mt-2 rounded-lg border border-slate-200/80 bg-white/50 p-2 dark:border-slate-700/80 dark:bg-slate-800/40">
+                  <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
                     {activeCalendarDateKey} のサマリー
                   </p>
                   {selectedDayStats.length === 0 ? (
                     <p className="text-sm text-slate-500">この日の記録はありません。</p>
                   ) : (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                       {selectedDayStats.map((entry) => (
                         <div
                           key={`calendar-summary-${entry.memberId}`}
@@ -1096,16 +1087,18 @@ export default function Home() {
                               className={`h-2 w-2 rounded-full ${memberColorMap.get(entry.memberId) ?? "bg-slate-400"}`}
                             />
                           </p>
-                          <p className="text-xs text-slate-700 dark:text-slate-200">
-                            <span className="text-base font-bold text-slate-800 dark:text-slate-100">
-                              {entry.count}杯
-                            </span>
-                            {" / "}
-                            <span className="font-semibold">
-                              ¥{entry.amount.toLocaleString()}
+                          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-slate-700 dark:text-slate-200">
+                            <span>
+                              <span className="text-base font-bold text-slate-800 dark:text-slate-100">
+                                {entry.count}杯
+                              </span>
+                              {" / "}
+                              <span className="font-semibold">
+                                ¥{entry.amount.toLocaleString()}
+                              </span>
                             </span>
                             {entry.drinkBreakdown && entry.count > 0 ? (
-                              <span className="ml-2 text-[11px] text-slate-500 dark:text-slate-300">
+                              <span className="text-[11px] text-slate-500 dark:text-slate-300">
                                 <DrinkBreakdownInline
                                   breakdown={entry.drinkBreakdown}
                                 />
@@ -1119,7 +1112,7 @@ export default function Home() {
                 </div>
                 {householdId &&
                   activeCalendarDateKey <= formatLocalYmd(new Date()) && (
-                    <div className="mt-3">
+                    <div className="mt-2">
                       <Link
                         href={`/day/${activeCalendarDateKey}`}
                         className="inline-flex w-full items-center justify-center rounded-lg border border-blue-500 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 transition hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-100 dark:hover:bg-blue-900/50"

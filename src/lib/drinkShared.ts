@@ -168,7 +168,7 @@ export function isErrorMessage(text: string) {
 /** Sorted breakdown rows for UI (e.g. inline icons + counts). */
 export function getDrinkBreakdownRows(
   breakdownMap: Map<DrinkType, number>,
-  maxParts = 4,
+  maxParts = 6,
 ): { rows: { drinkType: DrinkType; count: number }[]; truncated: boolean } {
   const sorted = Array.from(breakdownMap.entries())
     .filter(([, value]) => value > 0)
