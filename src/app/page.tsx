@@ -4,23 +4,26 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
-
-type DrinkType =
-  | "beer"
-  | "whisky"
-  | "wine"
-  | "sake"
-  | "shochu"
-  | "other";
-
-type DrinkLog = {
-  id: string;
-  user_id: string;
-  household_id: string;
-  drink_type: string;
-  custom_drink_name: string | null;
-  created_at: string;
-};
+import {
+  CHIP_BUTTON_CLASS,
+  DRINK_ORDER,
+  DRINKS,
+  type DrinkLog,
+  type DrinkType,
+  formatDrinkBreakdown,
+  formatHistoryDate,
+  formatLocalYmd,
+  getDrinkDisplayName,
+  getDrinkEmoji,
+  getSummaryDrankOnFilter,
+  isErrorMessage,
+  logInCalendarMonth,
+  logMatchesSummaryBands,
+  MEMBER_COLOR_CLASSES,
+  OUTLINE_BUTTON_CLASS,
+  SECTION_CARD_CLASS,
+  SAVINGS_PER_DRINK,
+} from "@/lib/drinkShared";
 
 type UserProfile = {
   user_id: string;
@@ -28,159 +31,7 @@ type UserProfile = {
   display_name: string | null;
 };
 
-const DRINKS: { key: DrinkType; label: string }[] = [
-  { key: "beer", label: "ビール" },
-  { key: "whisky", label: "ウイスキー" },
-  { key: "wine", label: "ワイン" },
-  { key: "sake", label: "日本酒" },
-  { key: "shochu", label: "焼酎" },
-  { key: "other", label: "その他" },
-];
-const DRINK_ORDER = new Map<DrinkType, number>(
-  DRINKS.map((drink, index) => [drink.key, index]),
-);
-
-const SAVINGS_PER_DRINK = 500;
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-const MEMBER_COLOR_CLASSES = [
-  "bg-red-500",
-  "bg-blue-500",
-  "bg-emerald-500",
-  "bg-violet-500",
-  "bg-amber-500",
-  "bg-pink-500",
-];
-const SECTION_CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/40";
-const OUTLINE_BUTTON_CLASS =
-  "rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
-const CHIP_BUTTON_CLASS =
-  "rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
-
-function isSameDateInLocal(date: Date, target: Date) {
-  return (
-    date.getFullYear() === target.getFullYear() &&
-    date.getMonth() === target.getMonth() &&
-    date.getDate() === target.getDate()
-  );
-}
-
-function isSameMonthInLocal(date: Date, target: Date) {
-  return (
-    date.getFullYear() === target.getFullYear() &&
-    date.getMonth() === target.getMonth()
-  );
-}
-
-function getDrinkDisplayName(drinkType: DrinkType, customDrinkName?: string) {
-  if (drinkType === "other" && customDrinkName?.trim()) {
-    return `その他 (${customDrinkName.trim()})`;
-  }
-  const found = DRINKS.find((d) => d.key === drinkType);
-  return found?.label ?? drinkType;
-}
-
-function getDrinkEmoji(drinkType: string) {
-  switch (drinkType) {
-    case "beer":
-      return "🍺";
-    case "whisky":
-      return "🥃";
-    case "wine":
-      return "🍷";
-    case "sake":
-      return "🍶";
-    case "shochu":
-      return "🍹";
-    case "other":
-      return "🍸";
-    default:
-      return "🍸";
-  }
-}
-
-function formatHistoryDate(value: string) {
-  return new Date(value).toLocaleString("ja-JP", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
-function toDateKey(value: string) {
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function isErrorMessage(text: string) {
-  return text.includes("失敗") || text.includes("エラー");
-}
-
-function formatDrinkBreakdown(
-  breakdownMap: Map<DrinkType, number>,
-  maxParts = 4,
-) {
-  const breakdownParts = Array.from(breakdownMap.entries())
-    .filter(([, value]) => value > 0)
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return (DRINK_ORDER.get(a[0]) ?? 999) - (DRINK_ORDER.get(b[0]) ?? 999);
-    })
-    .map(([drinkType, value]) => `${getDrinkEmoji(drinkType)}${value}`);
-  if (breakdownParts.length > maxParts) {
-    return `${breakdownParts.slice(0, maxParts).join(" ")} …`;
-  }
-  return breakdownParts.join(" ");
-}
-
-/** Union of local-day (dayOffset) and local-month (monthOffset) for summary queries. */
-function getHomeSummaryLogRange(dayOffset: number, monthOffset: number) {
-  const todayTarget = new Date();
-  todayTarget.setDate(todayTarget.getDate() + dayOffset);
-
-  const monthTarget = new Date();
-  monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
-
-  const dayStart = new Date(
-    todayTarget.getFullYear(),
-    todayTarget.getMonth(),
-    todayTarget.getDate(),
-    0,
-    0,
-    0,
-    0,
-  );
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-
-  const monthStart = new Date(
-    monthTarget.getFullYear(),
-    monthTarget.getMonth(),
-    1,
-    0,
-    0,
-    0,
-    0,
-  );
-  const monthEnd = new Date(
-    monthTarget.getFullYear(),
-    monthTarget.getMonth() + 1,
-    1,
-    0,
-    0,
-    0,
-    0,
-  );
-
-  const rangeStart = dayStart < monthStart ? dayStart : monthStart;
-  const rangeEnd = dayEnd > monthEnd ? dayEnd : monthEnd;
-  return { rangeStart, rangeEnd };
-}
 
 export default function Home() {
   const supabase = getSupabaseClient();
@@ -240,7 +91,9 @@ export default function Home() {
     const fetchLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+        .select(
+          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
+        )
         .eq("household_id", householdId)
         .order("created_at", { ascending: false })
         .limit(10);
@@ -258,18 +111,19 @@ export default function Home() {
   useEffect(() => {
     if (!supabase || !user || !householdId) return;
 
-    const { rangeStart, rangeEnd } = getHomeSummaryLogRange(
-      dayOffset,
-      monthOffset,
-    );
+    const { dayStartStr, dayEndStr, monthStartStr, monthEndStr } =
+      getSummaryDrankOnFilter(dayOffset, monthOffset);
 
     const fetchSummaryLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+        .select(
+          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
+        )
         .eq("household_id", householdId)
-        .gte("created_at", rangeStart.toISOString())
-        .lt("created_at", rangeEnd.toISOString())
+        .or(
+          `and(drank_on.gte.${dayStartStr},drank_on.lt.${dayEndStr}),and(drank_on.gte.${monthStartStr},drank_on.lt.${monthEndStr})`,
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -287,32 +141,22 @@ export default function Home() {
 
     const calendarMonth = new Date();
     calendarMonth.setMonth(calendarMonth.getMonth() + calendarMonthOffset);
-    const monthStart = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
+    const monthStartStr = formatLocalYmd(
+      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1),
     );
-    const monthEnd = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth() + 1,
-      1,
-      0,
-      0,
-      0,
-      0,
+    const monthEndStr = formatLocalYmd(
+      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1),
     );
 
     const fetchCalendarLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+        .select(
+          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
+        )
         .eq("household_id", householdId)
-        .gte("created_at", monthStart.toISOString())
-        .lt("created_at", monthEnd.toISOString())
+        .gte("drank_on", monthStartStr)
+        .lt("drank_on", monthEndStr)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -324,6 +168,10 @@ export default function Home() {
 
     void fetchCalendarLogs();
   }, [calendarMonthOffset, householdId, supabase, user]);
+
+  useEffect(() => {
+    setSelectedCalendarDate("");
+  }, [calendarMonthOffset]);
 
   useEffect(() => {
     if (!supabase || !user || !householdId) return;
@@ -430,11 +278,8 @@ export default function Home() {
   ]);
 
   const userStats = useMemo(() => {
-    const todayTarget = new Date();
-    todayTarget.setDate(todayTarget.getDate() + dayOffset);
-
-    const monthTarget = new Date();
-    monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
+    const { dayStartStr, dayEndStr, monthStartStr, monthEndStr } =
+      getSummaryDrankOnFilter(dayOffset, monthOffset);
 
     const createEmptyBreakdown = () => {
       const breakdown = new Map<DrinkType, number>();
@@ -470,9 +315,9 @@ export default function Home() {
         dayBreakdown: createEmptyBreakdown(),
         monthBreakdown: createEmptyBreakdown(),
       };
-      const createdAt = new Date(log.created_at);
       const drinkType = log.drink_type as DrinkType;
-      if (isSameDateInLocal(createdAt, todayTarget)) {
+      const drankOn = log.drank_on;
+      if (drankOn >= dayStartStr && drankOn < dayEndStr) {
         stat.day += 1;
         if (DRINK_ORDER.has(drinkType)) {
           stat.dayBreakdown.set(
@@ -481,7 +326,7 @@ export default function Home() {
           );
         }
       }
-      if (isSameMonthInLocal(createdAt, monthTarget)) {
+      if (drankOn >= monthStartStr && drankOn < monthEndStr) {
         stat.month += 1;
         if (DRINK_ORDER.has(drinkType)) {
           stat.monthBreakdown.set(
@@ -554,7 +399,7 @@ export default function Home() {
   const calendarDateMarkers = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const log of calendarLogs) {
-      const key = toDateKey(log.created_at);
+      const key = log.drank_on;
       const current = map.get(key) ?? new Set<string>();
       current.add(log.user_id);
       map.set(key, current);
@@ -603,7 +448,7 @@ export default function Home() {
         ? today.getDate()
         : 1,
     );
-    return toDateKey(selectedDefault.toISOString());
+    return formatLocalYmd(selectedDefault);
   }, [calendarMonthDate]);
 
   const activeCalendarDateKey = useMemo(() => {
@@ -629,7 +474,7 @@ export default function Home() {
     }
 
     for (const log of calendarLogs) {
-      if (toDateKey(log.created_at) !== activeCalendarDateKey) continue;
+      if (log.drank_on !== activeCalendarDateKey) continue;
       if (!countMap.has(log.user_id)) continue;
       countMap.set(log.user_id, (countMap.get(log.user_id) ?? 0) + 1);
       const memberDrinkMap = breakdownMap.get(log.user_id);
@@ -722,12 +567,15 @@ export default function Home() {
       drink_type: drinkType,
       custom_drink_name:
         drinkType === "other" ? customDrinkName?.trim() ?? null : null,
+      drank_on: formatLocalYmd(new Date()),
     };
 
     const { data, error } = await supabase
       .from("drink_logs")
       .insert(payload)
-      .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+      .select(
+        "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
+      )
       .single();
 
     if (error) {
@@ -737,36 +585,23 @@ export default function Home() {
       const createdAt = row.created_at;
       setLogs((current) => [row, ...current].slice(0, 10));
 
-      const created = new Date(row.created_at);
-      const { rangeStart, rangeEnd } = getHomeSummaryLogRange(
-        dayOffset,
-        monthOffset,
-      );
-      if (created >= rangeStart && created < rangeEnd) {
+      const { dayStartStr, dayEndStr, monthStartStr, monthEndStr } =
+        getSummaryDrankOnFilter(dayOffset, monthOffset);
+      if (
+        logMatchesSummaryBands(
+          row.drank_on,
+          dayStartStr,
+          dayEndStr,
+          monthStartStr,
+          monthEndStr,
+        )
+      ) {
         setSummaryLogs((prev) => [row, ...prev]);
       }
 
       const calendarMonth = new Date();
       calendarMonth.setMonth(calendarMonth.getMonth() + calendarMonthOffset);
-      const calMonthStart = new Date(
-        calendarMonth.getFullYear(),
-        calendarMonth.getMonth(),
-        1,
-        0,
-        0,
-        0,
-        0,
-      );
-      const calMonthEnd = new Date(
-        calendarMonth.getFullYear(),
-        calendarMonth.getMonth() + 1,
-        1,
-        0,
-        0,
-        0,
-        0,
-      );
-      if (created >= calMonthStart && created < calMonthEnd) {
+      if (logInCalendarMonth(row.drank_on, calendarMonth)) {
         setCalendarLogs((prev) => [row, ...prev]);
       }
 
@@ -1267,6 +1102,17 @@ export default function Home() {
                 </div>
               )}
             </div>
+            {householdId &&
+              activeCalendarDateKey <= formatLocalYmd(new Date()) && (
+                <div className="mt-3">
+                  <Link
+                    href={`/day/${activeCalendarDateKey}`}
+                    className="inline-flex w-full items-center justify-center rounded-lg border border-blue-500 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 transition hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-100 dark:hover:bg-blue-900/50"
+                  >
+                    この日に追加
+                  </Link>
+                </div>
+              )}
           </section>
 
           <section className={SECTION_CARD_CLASS}>

@@ -32,12 +32,22 @@ create table if not exists public.drink_logs (
   household_id uuid not null references public.households(id) on delete cascade,
   drink_type text not null check (drink_type in ('beer', 'whisky', 'wine', 'sake', 'shochu', 'other')),
   custom_drink_name text,
+  drank_on date not null default (timezone('Asia/Tokyo', now()))::date,
   created_at timestamptz not null default now()
 );
+
+-- Migrate legacy tables that predate drank_on before creating indexes on that column.
+alter table public.drink_logs add column if not exists drank_on date;
+update public.drink_logs
+set drank_on = (timezone('Asia/Tokyo', created_at))::date
+where drank_on is null;
+alter table public.drink_logs alter column drank_on set not null;
+alter table public.drink_logs alter column drank_on set default (timezone('Asia/Tokyo', now()))::date;
 
 create index if not exists drink_logs_user_id_idx on public.drink_logs(user_id);
 create index if not exists drink_logs_household_id_idx on public.drink_logs(household_id);
 create index if not exists drink_logs_created_at_idx on public.drink_logs(created_at desc);
+create index if not exists drink_logs_household_drank_on_idx on public.drink_logs(household_id, drank_on);
 
 alter table public.households enable row level security;
 alter table public.household_members enable row level security;

@@ -11,6 +11,7 @@ type DrinkLog = {
   household_id: string;
   drink_type: string;
   custom_drink_name: string | null;
+  drank_on: string;
   created_at: string;
 };
 
@@ -120,7 +121,9 @@ export default function HistoryPage() {
         await Promise.all([
           supabase
             .from("drink_logs")
-            .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+            .select(
+              "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
+            )
             .eq("household_id", householdId)
             .order("created_at", { ascending: false })
             .range(from, to),
@@ -305,8 +308,8 @@ export default function HistoryPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-gray-800 dark:text-gray-100">
-                  {getDrinkEmoji(log.drink_type)} {formatMemberName(log.user_id)} ·{" "}
-                  {formatHistoryDate(log.created_at)}
+                  {getDrinkEmoji(log.drink_type)} {formatMemberName(log.user_id)} · 飲酒日{" "}
+                  {log.drank_on} · 登録 {formatHistoryDate(log.created_at)}
                 </span>
                 <button
                   onClick={() => handleDeleteLog(log)}

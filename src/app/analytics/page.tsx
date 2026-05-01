@@ -11,6 +11,7 @@ type DrinkLog = {
   household_id: string;
   drink_type: string;
   custom_drink_name: string | null;
+  drank_on: string;
   created_at: string;
 };
 
@@ -126,16 +127,20 @@ export default function AnalyticsPage() {
     const month = Number(monthText);
     if (!year || !month) return;
 
-    const monthStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    const monthEnd = new Date(year, month, 1, 0, 0, 0, 0);
+    const monthStartStr = `${year}-${`${month}`.padStart(2, "0")}-01`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const monthEndStr = `${nextYear}-${`${nextMonth}`.padStart(2, "0")}-01`;
 
     const loadMonthLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+        .select(
+          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
+        )
         .eq("household_id", householdId)
-        .gte("created_at", monthStart.toISOString())
-        .lt("created_at", monthEnd.toISOString())
+        .gte("drank_on", monthStartStr)
+        .lt("drank_on", monthEndStr)
         .order("created_at", { ascending: false });
 
       if (error) {
