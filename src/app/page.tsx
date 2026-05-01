@@ -10,6 +10,8 @@ import {
   CHIP_BUTTON_CLASS,
   DRINK_ORDER,
   DRINKS,
+  DRINK_INPUT_TILE_ACCENT_CLASS,
+  DRINK_INPUT_TILE_ICON_SRC,
   type DrinkLog,
   type DrinkType,
   drankOnDiffersFromRegisteredDay,
@@ -791,10 +793,11 @@ export default function Home() {
         <>
           <section className={SECTION_CARD_CLASS}>
             <h2 className="mb-3 font-semibold">飲酒記録</h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2">
               {DRINKS.map((drink) => (
                 <button
                   key={drink.key}
+                  type="button"
                   onClick={() => {
                     if (drink.key === "other") {
                       setIsOtherInputOpen((prev) => !prev);
@@ -804,13 +807,29 @@ export default function Home() {
                     void handleAddDrink(drink.key);
                   }}
                   disabled={isSubmitting || !householdId}
-                  className={`rounded border px-3 py-2 text-sm ${
+                  className={`flex min-h-[5.75rem] flex-col overflow-hidden rounded-xl border shadow-sm transition active:scale-[0.98] disabled:opacity-50 dark:shadow-none ${
                     isOtherInputOpen && drink.key === "other"
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-300"
-                  } transition active:scale-95 active:bg-blue-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:active:bg-slate-700`}
+                      ? "border-blue-600 bg-blue-50 dark:border-blue-500 dark:bg-blue-950/40"
+                      : "border-slate-200 bg-white active:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:active:bg-slate-700/80"
+                  }`}
                 >
-                  {drink.label}
+                  <span className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-slate-800 dark:text-slate-100">
+                    <img
+                      src={DRINK_INPUT_TILE_ICON_SRC[drink.key]}
+                      alt=""
+                      width={44}
+                      height={44}
+                      className="pointer-events-none h-11 w-11 shrink-0 object-contain"
+                      decoding="async"
+                    />
+                    <span className="max-w-full text-center text-[11px] font-medium leading-tight sm:text-xs">
+                      {drink.label}
+                    </span>
+                  </span>
+                  <span
+                    className={`h-1 w-full shrink-0 ${DRINK_INPUT_TILE_ACCENT_CLASS[drink.key]}`}
+                    aria-hidden
+                  />
                 </button>
               ))}
             </div>

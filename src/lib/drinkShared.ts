@@ -29,6 +29,26 @@ export const DRINK_ORDER = new Map<DrinkType, number>(
   DRINKS.map((drink, index) => [drink.key, index]),
 );
 
+/** 128px PNG paths for drink input tiles on home / day pages only (not DrinkGlyph). */
+export const DRINK_INPUT_TILE_ICON_SRC: Record<DrinkType, string> = {
+  beer: "/icons/beer_128.png",
+  whisky: "/icons/whisky_128.png",
+  wine: "/icons/wine_128.png",
+  sake: "/icons/sake_128.png",
+  shochu: "/icons/shochu_128.png",
+  other: "/icons/other_128.png",
+};
+
+/** Bottom accent strip for drink input tiles (home / day pages). */
+export const DRINK_INPUT_TILE_ACCENT_CLASS: Record<DrinkType, string> = {
+  beer: "bg-yellow-400 dark:bg-yellow-500",
+  whisky: "bg-amber-800 dark:bg-amber-700",
+  wine: "bg-red-600 dark:bg-red-500",
+  sake: "bg-blue-600 dark:bg-blue-500",
+  shochu: "bg-emerald-600 dark:bg-emerald-500",
+  other: "bg-violet-600 dark:bg-violet-500",
+};
+
 export const SAVINGS_PER_DRINK = 500;
 
 export const MEMBER_COLOR_CLASSES = [
