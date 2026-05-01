@@ -21,6 +21,12 @@ type UserProfile = {
 
 const SAVINGS_PER_DRINK = 500;
 
+/** Shared outer box for filter row controls (must match select and month visually). */
+const ANALYTICS_FILTER_BOX_CLASS =
+  "box-border h-10 w-full min-w-0 max-w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-800";
+const ANALYTICS_FILTER_TEXT_CLASS =
+  "text-sm leading-5 text-slate-800 dark:text-slate-100";
+
 function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
 }
@@ -263,7 +269,7 @@ export default function AnalyticsPage() {
             <select
               value={selectedUserId}
               onChange={(event) => setSelectedUserId(event.target.value)}
-              className="box-border h-10 w-full min-w-0 max-w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm leading-5 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className={`${ANALYTICS_FILTER_BOX_CLASS} ${ANALYTICS_FILTER_TEXT_CLASS}`}
             >
               {memberOptions.map((memberUserId) => (
                 <option key={memberUserId} value={memberUserId}>
@@ -276,12 +282,16 @@ export default function AnalyticsPage() {
             <label className="mb-1 block text-xs font-semibold text-slate-700">
               対象月
             </label>
-            <input
-              type="month"
-              value={monthInput}
-              onChange={(event) => setMonthInput(event.target.value)}
-              className="box-border h-10 w-full min-w-0 max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm leading-5 text-slate-800 [color-scheme:light] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:[color-scheme:dark]"
-            />
+            <div
+              className={`${ANALYTICS_FILTER_BOX_CLASS} flex min-h-0 min-w-0 items-center overflow-hidden`}
+            >
+              <input
+                type="month"
+                value={monthInput}
+                onChange={(event) => setMonthInput(event.target.value)}
+                className={`min-h-0 min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 ${ANALYTICS_FILTER_TEXT_CLASS} outline-none [color-scheme:light] focus:outline-none focus:ring-0 dark:[color-scheme:dark]`}
+              />
+            </div>
           </div>
         </div>
       </section>
