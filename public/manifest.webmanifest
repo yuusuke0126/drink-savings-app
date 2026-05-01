@@ -1,16 +1,26 @@
 {
-  "name": "Drink Savings App",
-  "short_name": "DrinkSave",
-  "description": "Track drinks and savings.",
+  "name": "飲酒記録アプリ",
+  "short_name": "飲酒記録",
+  "description": "飲酒量と貯金（1杯500円）を世帯で記録します。",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#ffffff",
   "theme_color": "#111827",
   "icons": [
     {
-      "src": "/next.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/apple-icon",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
