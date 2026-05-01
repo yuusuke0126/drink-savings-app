@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# drink-savings-app
 
-## Getting Started
+世帯単位で飲酒記録と「1 杯 = 500 円」の貯金換算を行う **Next.js（App Router）PWA**。データは **Supabase**（Auth + PostgreSQL + RLS）。
 
-First, run the development server:
+## ドキュメント
+
+| 内容 | 場所 |
+|------|------|
+| **このリポジトリの変更・運用まとめ** | [`docs/MILESTONE_SUMMARY.md`](docs/MILESTONE_SUMMARY.md) |
+| **要件・アーキテクチャ・タスクリスト（親フォルダ側）** | `../python/doc/drinking_app_*.md`（開発マシン上のパス。内容は現行実装と同期済み 2026-05） |
+| **DB 正本** | [`supabase/schema.sql`](supabase/schema.sql) |
+| **テストデータ削除・ユーザー削除（要レビュー）** | [`supabase/scripts/purge_test_data_and_user.sql`](supabase/scripts/purge_test_data_and_user.sql) |
+
+## 開発
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+環境変数: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`（`.env.local`）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## デプロイ
 
-## Learn More
+[Vercel](https://vercel.com) 想定。環境変数はローカルと同様に設定。
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+以下は `create-next-app` 由来の参照リンクです。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Next.js Documentation](https://nextjs.org/docs)

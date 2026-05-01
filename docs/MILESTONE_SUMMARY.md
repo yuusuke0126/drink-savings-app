@@ -4,6 +4,20 @@
 
 ---
 
+## 0. ドキュメントの正本と所在（整合性）
+
+| 種別 | パス | 備考 |
+|------|------|------|
+| **マイルストーン一式（本書）** | `docs/MILESTONE_SUMMARY.md` | リポジトリ内。実装と突き合わせやすい要約 |
+| **要件定義** | `Documents/src/python/doc/drinking_app_requirements.md` | リポジトリ外。更新時は **4.1.1 カレンダー／月ナビ**・**4.3 集計詳細導線** など現行 UI と照合すること |
+| **アーキテクチャ（図）** | `Documents/src/python/doc/drinking_app_architecture_diagram.md` | ER の **`drank_on`**、ホームのデータ取得フロー、ルーティング図を正とする |
+| **MVP タスクリスト** | `Documents/src/python/doc/drinking_app_mvp_tasklist.md` | §11 と §6 の文言を現行仕様に追随 |
+| **セットアップ** | `Documents/src/python/doc/drinking_app_setup_guide.md` | `schema.sql` パス・`.env.local` |
+
+※ `python/doc` は **別ディレクトリ**にあり、Git のリポジトリ境界が `drink-savings-app` と異なる場合があります。変更後は両方のコミット方針に注意してください。
+
+---
+
 ## 1. 概要
 
 - **アプリ**: Next.js（App Router）による飲酒記録 PWA。Supabase（Auth + Postgres）で世帯単位共有。
