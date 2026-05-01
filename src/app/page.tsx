@@ -851,8 +851,8 @@ export default function Home() {
                 </p>
               </div>
               {user && (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                  <div className="flex flex-1 flex-col rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60">
+                <div className="grid grid-cols-2 gap-3 items-stretch">
+                  <div className="min-w-0 flex flex-col rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-blue-700 dark:text-blue-200">
                       {formatMemberName(user.id)}
                     </p>
@@ -864,17 +864,17 @@ export default function Home() {
                       {((todayBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
                     {(todayBandStats.get(user.id)?.count ?? 0) > 0 && (
-                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                      <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-300">
                         {formatDrinkBreakdown(
                           todayBandStats.get(user.id)?.breakdown ?? new Map(),
                         )}
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-1 flex-col gap-2">
+                  <div className="min-w-0 flex flex-col gap-2">
                     {summaryMemberIds.filter((id) => id !== user.id).length ===
                       0 && (
-                      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-blue-200/80 bg-white/40 px-2 py-6 text-center text-xs text-slate-500 dark:border-blue-900/50 dark:bg-slate-800/40 dark:text-slate-400">
+                      <div className="flex min-h-[4.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-blue-200/80 bg-white/40 px-1 py-3 text-center text-[11px] leading-snug text-slate-500 dark:border-blue-900/50 dark:bg-slate-800/40 dark:text-slate-400">
                         他メンバーがいません
                       </div>
                     )}
@@ -951,8 +951,8 @@ export default function Home() {
               </div>
 
               {user && (
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                  <div className="flex flex-1 flex-col rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60">
+                <div className="mb-4 grid grid-cols-2 gap-3 items-stretch">
+                  <div className="min-w-0 flex flex-col rounded-lg border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-200">
                       {formatMemberName(user.id)}
                     </p>
@@ -964,17 +964,17 @@ export default function Home() {
                       {((monthBandStats.get(user.id)?.count ?? 0) * SAVINGS_PER_DRINK).toLocaleString()}
                     </p>
                     {(monthBandStats.get(user.id)?.count ?? 0) > 0 && (
-                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                      <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-300">
                         {formatDrinkBreakdown(
                           monthBandStats.get(user.id)?.breakdown ?? new Map(),
                         )}
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-1 flex-col gap-2">
+                  <div className="min-w-0 flex flex-col gap-2">
                     {summaryMemberIds.filter((id) => id !== user.id).length ===
                       0 && (
-                      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-indigo-200/80 bg-white/40 px-2 py-6 text-center text-xs text-slate-500 dark:border-indigo-900/50 dark:bg-slate-800/40 dark:text-slate-400">
+                      <div className="flex min-h-[4.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-indigo-200/80 bg-white/40 px-1 py-3 text-center text-[11px] leading-snug text-slate-500 dark:border-indigo-900/50 dark:bg-slate-800/40 dark:text-slate-400">
                         他メンバーがいません
                       </div>
                     )}
