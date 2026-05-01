@@ -138,12 +138,57 @@ function formatDrinkBreakdown(
   return breakdownParts.join(" ");
 }
 
+/** Union of local-day (dayOffset) and local-month (monthOffset) for summary queries. */
+function getHomeSummaryLogRange(dayOffset: number, monthOffset: number) {
+  const todayTarget = new Date();
+  todayTarget.setDate(todayTarget.getDate() + dayOffset);
+
+  const monthTarget = new Date();
+  monthTarget.setMonth(monthTarget.getMonth() + monthOffset);
+
+  const dayStart = new Date(
+    todayTarget.getFullYear(),
+    todayTarget.getMonth(),
+    todayTarget.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const monthStart = new Date(
+    monthTarget.getFullYear(),
+    monthTarget.getMonth(),
+    1,
+    0,
+    0,
+    0,
+    0,
+  );
+  const monthEnd = new Date(
+    monthTarget.getFullYear(),
+    monthTarget.getMonth() + 1,
+    1,
+    0,
+    0,
+    0,
+    0,
+  );
+
+  const rangeStart = dayStart < monthStart ? dayStart : monthStart;
+  const rangeEnd = dayEnd > monthEnd ? dayEnd : monthEnd;
+  return { rangeStart, rangeEnd };
+}
+
 export default function Home() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [logs, setLogs] = useState<DrinkLog[]>([]);
+  const [summaryLogs, setSummaryLogs] = useState<DrinkLog[]>([]);
   const [calendarLogs, setCalendarLogs] = useState<DrinkLog[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -179,6 +224,7 @@ export default function Home() {
       setUser(session?.user ?? null);
       if (!session?.user) {
         setLogs([]);
+        setSummaryLogs([]);
         setCalendarLogs([]);
         setHouseholdMemberIds([]);
         setProfileMap({});
@@ -208,6 +254,33 @@ export default function Home() {
 
     void fetchLogs();
   }, [householdId, supabase, user]);
+
+  useEffect(() => {
+    if (!supabase || !user || !householdId) return;
+
+    const { rangeStart, rangeEnd } = getHomeSummaryLogRange(
+      dayOffset,
+      monthOffset,
+    );
+
+    const fetchSummaryLogs = async () => {
+      const { data, error } = await supabase
+        .from("drink_logs")
+        .select("id,user_id,household_id,drink_type,custom_drink_name,created_at")
+        .eq("household_id", householdId)
+        .gte("created_at", rangeStart.toISOString())
+        .lt("created_at", rangeEnd.toISOString())
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setMessage(`集計用ログ取得エラー: ${error.message}`);
+        return;
+      }
+      setSummaryLogs((data as DrinkLog[]) ?? []);
+    };
+
+    void fetchSummaryLogs();
+  }, [dayOffset, householdId, monthOffset, supabase, user]);
 
   useEffect(() => {
     if (!supabase || !user || !householdId) return;
@@ -321,6 +394,7 @@ export default function Home() {
         new Set([
           ...householdMemberIds,
           ...logs.map((log) => log.user_id),
+          ...summaryLogs.map((log) => log.user_id),
           ...calendarLogs.map((log) => log.user_id),
         ]),
       );
@@ -345,7 +419,15 @@ export default function Home() {
     };
 
     void loadVisibleProfiles();
-  }, [calendarLogs, householdId, householdMemberIds, logs, supabase, user]);
+  }, [
+    calendarLogs,
+    householdId,
+    householdMemberIds,
+    logs,
+    summaryLogs,
+    supabase,
+    user,
+  ]);
 
   const userStats = useMemo(() => {
     const todayTarget = new Date();
@@ -381,7 +463,7 @@ export default function Home() {
       });
     }
 
-    for (const log of logs) {
+    for (const log of summaryLogs) {
       const stat = map.get(log.user_id) ?? {
         day: 0,
         month: 0,
@@ -417,7 +499,7 @@ export default function Home() {
       if (b === user.id) return 1;
       return a.localeCompare(b);
     });
-  }, [dayOffset, householdMemberIds, logs, monthOffset, user]);
+  }, [dayOffset, householdMemberIds, monthOffset, summaryLogs, user]);
 
   const dayLabel = useMemo(() => {
     const target = new Date();
@@ -651,8 +733,43 @@ export default function Home() {
     if (error) {
       setMessage(`記録失敗: ${error.message}`);
     } else if (data) {
-      const createdAt = (data as DrinkLog).created_at;
-      setLogs((current) => [data as DrinkLog, ...current]);
+      const row = data as DrinkLog;
+      const createdAt = row.created_at;
+      setLogs((current) => [row, ...current].slice(0, 10));
+
+      const created = new Date(row.created_at);
+      const { rangeStart, rangeEnd } = getHomeSummaryLogRange(
+        dayOffset,
+        monthOffset,
+      );
+      if (created >= rangeStart && created < rangeEnd) {
+        setSummaryLogs((prev) => [row, ...prev]);
+      }
+
+      const calendarMonth = new Date();
+      calendarMonth.setMonth(calendarMonth.getMonth() + calendarMonthOffset);
+      const calMonthStart = new Date(
+        calendarMonth.getFullYear(),
+        calendarMonth.getMonth(),
+        1,
+        0,
+        0,
+        0,
+        0,
+      );
+      const calMonthEnd = new Date(
+        calendarMonth.getFullYear(),
+        calendarMonth.getMonth() + 1,
+        1,
+        0,
+        0,
+        0,
+        0,
+      );
+      if (created >= calMonthStart && created < calMonthEnd) {
+        setCalendarLogs((prev) => [row, ...prev]);
+      }
+
       setMessage(
         `${getDrinkDisplayName(drinkType, customDrinkName)}を記録しました。${formatHistoryDate(createdAt)}`,
       );
@@ -795,6 +912,8 @@ export default function Home() {
       setMessage(`削除失敗: ${error.message}`);
     } else {
       setLogs((current) => current.filter((item) => item.id !== log.id));
+      setSummaryLogs((current) => current.filter((item) => item.id !== log.id));
+      setCalendarLogs((current) => current.filter((item) => item.id !== log.id));
       setMessage("記録を削除しました。");
     }
 

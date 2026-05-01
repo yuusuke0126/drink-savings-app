@@ -255,15 +255,15 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="rounded border p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+          <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold text-slate-700">
               対象ユーザー
             </label>
             <select
               value={selectedUserId}
               onChange={(event) => setSelectedUserId(event.target.value)}
-              className="h-10 w-full rounded border px-3 py-2 text-sm leading-5"
+              className="box-border h-10 w-full min-w-0 max-w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm leading-5 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               {memberOptions.map((memberUserId) => (
                 <option key={memberUserId} value={memberUserId}>
@@ -272,7 +272,7 @@ export default function AnalyticsPage() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="mb-1 block text-xs font-semibold text-slate-700">
               対象月
             </label>
@@ -280,7 +280,7 @@ export default function AnalyticsPage() {
               type="month"
               value={monthInput}
               onChange={(event) => setMonthInput(event.target.value)}
-              className="h-10 w-full rounded border px-3 py-2 text-sm leading-5"
+              className="box-border h-10 w-full min-w-0 max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm leading-5 text-slate-800 [color-scheme:light] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:[color-scheme:dark]"
             />
           </div>
         </div>
