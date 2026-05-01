@@ -4,6 +4,12 @@ import { getDrinkEmoji } from "@/lib/drinkShared";
 
 const SHOCHU_ICON = "/icons/shochu.png";
 
+/** Box matches OS emoji scale even when parent font is ~11px (text-[11px] breakdown rows). */
+const SHOCHU_INLINE_BOX_CLASS =
+  "inline-flex h-[max(1.75em,1.35rem)] w-[max(1.75em,1.35rem)] shrink-0 items-center justify-center align-[-0.14em]";
+const SHOCHU_IMG_SIZE_CLASS =
+  "pointer-events-none h-[max(1.75em,1.35rem)] w-[max(1.75em,1.35rem)] max-w-none object-contain";
+
 type DrinkGlyphProps = {
   drinkType: string;
   className?: string;
@@ -14,17 +20,14 @@ type DrinkGlyphProps = {
  */
 export function DrinkGlyph({ drinkType, className = "" }: DrinkGlyphProps) {
   if (drinkType === "shochu") {
-    // Larger than default emoji line height for legibility; align-* tuned for inline breakdown rows.
     return (
-      <span
-        className={`inline-flex h-[1.48em] w-[1.48em] shrink-0 items-center justify-center align-[-0.12em] ${className}`}
-      >
+      <span className={`${SHOCHU_INLINE_BOX_CLASS} ${className}`}>
         <img
           src={SHOCHU_ICON}
           alt=""
-          width={30}
-          height={30}
-          className="pointer-events-none h-[1.48em] w-[1.48em] max-w-none object-contain"
+          width={32}
+          height={32}
+          className={SHOCHU_IMG_SIZE_CLASS}
           decoding="async"
         />
       </span>
