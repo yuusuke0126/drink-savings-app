@@ -4,17 +4,17 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
+import { DrinkBreakdownInline } from "@/components/DrinkBreakdownInline";
+import { DrinkGlyph } from "@/components/DrinkGlyph";
 import {
   CHIP_BUTTON_CLASS,
   DRINK_ORDER,
   DRINKS,
   type DrinkLog,
   type DrinkType,
-  formatDrinkBreakdown,
   formatHistoryDate,
   formatLocalYmd,
   getDrinkDisplayName,
-  getDrinkEmoji,
   isErrorMessage,
   logInCalendarMonth,
   MEMBER_COLOR_CLASSES,
@@ -462,14 +462,13 @@ export default function Home() {
     return sortedMemberIds.map((memberId) => {
       const count = countMap.get(memberId) ?? 0;
       const memberDrinkMap = breakdownMap.get(memberId) ?? new Map<DrinkType, number>();
-      const breakdownText =
-        user && memberId === user.id ? formatDrinkBreakdown(memberDrinkMap) : "";
 
       return {
         memberId,
         count,
         amount: count * SAVINGS_PER_DRINK,
-        breakdownText,
+        drinkBreakdown:
+          user && memberId === user.id ? memberDrinkMap : undefined,
       };
     });
   }, [activeCalendarDateKey, monthLogs, sortedMemberIds, user]);
@@ -865,9 +864,11 @@ export default function Home() {
                     </p>
                     {(todayBandStats.get(user.id)?.count ?? 0) > 0 && (
                       <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-300">
-                        {formatDrinkBreakdown(
-                          todayBandStats.get(user.id)?.breakdown ?? new Map(),
-                        )}
+                        <DrinkBreakdownInline
+                          breakdown={
+                            todayBandStats.get(user.id)?.breakdown ?? new Map()
+                          }
+                        />
                       </p>
                     )}
                   </div>
@@ -965,9 +966,11 @@ export default function Home() {
                     </p>
                     {(monthBandStats.get(user.id)?.count ?? 0) > 0 && (
                       <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-300">
-                        {formatDrinkBreakdown(
-                          monthBandStats.get(user.id)?.breakdown ?? new Map(),
-                        )}
+                        <DrinkBreakdownInline
+                          breakdown={
+                            monthBandStats.get(user.id)?.breakdown ?? new Map()
+                          }
+                        />
                       </p>
                     )}
                   </div>
@@ -1079,9 +1082,11 @@ export default function Home() {
                             <span className="font-semibold">
                               ¥{entry.amount.toLocaleString()}
                             </span>
-                            {entry.breakdownText ? (
+                            {entry.drinkBreakdown && entry.count > 0 ? (
                               <span className="ml-2 text-[11px] text-slate-500 dark:text-slate-300">
-                                {entry.breakdownText}
+                                <DrinkBreakdownInline
+                                  breakdown={entry.drinkBreakdown}
+                                />
                               </span>
                             ) : null}
                           </p>
@@ -1132,7 +1137,8 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-gray-800 dark:text-gray-100">
-                      {getDrinkEmoji(log.drink_type)} {formatMemberName(log.user_id)} ·{" "}
+                      <DrinkGlyph drinkType={log.drink_type} />{" "}
+                      {formatMemberName(log.user_id)} ·{" "}
                       {formatHistoryDate(log.created_at)}
                     </span>
                     <button

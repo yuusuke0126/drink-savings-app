@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
+import { DrinkGlyph } from "@/components/DrinkGlyph";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type DrinkLog = {
@@ -30,25 +31,6 @@ const ANALYTICS_FILTER_TEXT_CLASS =
 
 function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
-}
-
-function getDrinkEmoji(drinkType: string) {
-  switch (drinkType) {
-    case "beer":
-      return "🍺";
-    case "whisky":
-      return "🥃";
-    case "wine":
-      return "🍷";
-    case "sake":
-      return "🍶";
-    case "shochu":
-      return "🍹";
-    case "other":
-      return "🍸";
-    default:
-      return "🍸";
-  }
 }
 
 function getDrinkLabel(drinkType: string) {
@@ -313,7 +295,7 @@ export default function AnalyticsPage() {
                 className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2"
               >
                 <span className="text-sm font-medium text-slate-700">
-                  {getDrinkEmoji(drinkType)} {getDrinkLabel(drinkType)}
+                  <DrinkGlyph drinkType={drinkType} /> {getDrinkLabel(drinkType)}
                 </span>
                 <span className="text-sm text-slate-700">
                   {count}杯 / ¥{(count * SAVINGS_PER_DRINK).toLocaleString()}

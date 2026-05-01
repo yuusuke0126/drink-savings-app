@@ -98,21 +98,22 @@ export function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
 }
 
-export function formatDrinkBreakdown(
+/** Sorted breakdown rows for UI (e.g. inline icons + counts). */
+export function getDrinkBreakdownRows(
   breakdownMap: Map<DrinkType, number>,
   maxParts = 4,
-) {
-  const breakdownParts = Array.from(breakdownMap.entries())
+): { rows: { drinkType: DrinkType; count: number }[]; truncated: boolean } {
+  const sorted = Array.from(breakdownMap.entries())
     .filter(([, value]) => value > 0)
     .sort((a, b) => {
       if (b[1] !== a[1]) return b[1] - a[1];
       return (DRINK_ORDER.get(a[0]) ?? 999) - (DRINK_ORDER.get(b[0]) ?? 999);
-    })
-    .map(([drinkType, value]) => `${getDrinkEmoji(drinkType)}${value}`);
-  if (breakdownParts.length > maxParts) {
-    return `${breakdownParts.slice(0, maxParts).join(" ")} …`;
-  }
-  return breakdownParts.join(" ");
+    });
+  const truncated = sorted.length > maxParts;
+  const rows = sorted
+    .slice(0, maxParts)
+    .map(([drinkType, count]) => ({ drinkType, count }));
+  return { rows, truncated };
 }
 
 export function logInCalendarMonth(

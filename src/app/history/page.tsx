@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
+import { DrinkGlyph } from "@/components/DrinkGlyph";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type DrinkLog = {
@@ -25,25 +26,6 @@ const PAGE_SIZE = 20;
 
 function isErrorMessage(text: string) {
   return text.includes("失敗") || text.includes("エラー");
-}
-
-function getDrinkEmoji(drinkType: string) {
-  switch (drinkType) {
-    case "beer":
-      return "🍺";
-    case "whisky":
-      return "🥃";
-    case "wine":
-      return "🍷";
-    case "sake":
-      return "🍶";
-    case "shochu":
-      return "🍹";
-    case "other":
-      return "🍸";
-    default:
-      return "🍸";
-  }
 }
 
 function formatHistoryDate(value: string) {
@@ -308,7 +290,8 @@ export default function HistoryPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-gray-800 dark:text-gray-100">
-                  {getDrinkEmoji(log.drink_type)} {formatMemberName(log.user_id)} · 飲酒日{" "}
+                  <DrinkGlyph drinkType={log.drink_type} />{" "}
+                  {formatMemberName(log.user_id)} · 飲酒日{" "}
                   {log.drank_on} · 登録 {formatHistoryDate(log.created_at)}
                 </span>
                 <button

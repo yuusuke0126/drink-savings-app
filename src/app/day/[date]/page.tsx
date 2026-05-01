@@ -4,17 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { DrinkBreakdownInline } from "@/components/DrinkBreakdownInline";
 import { getSupabaseClient } from "@/lib/supabase";
 import {
   DRINK_ORDER,
   DRINKS,
   type DrinkLog,
   type DrinkType,
-  formatDrinkBreakdown,
   formatHistoryDate,
   formatLocalYmd,
   getDrinkDisplayName,
-  getDrinkEmoji,
   isErrorMessage,
   MEMBER_COLOR_CLASSES,
   OUTLINE_BUTTON_CLASS,
@@ -258,10 +257,11 @@ export default function DayLogPage() {
         memberId,
         count: stat.count,
         amount: stat.count * SAVINGS_PER_DRINK,
-        breakdownText: formatDrinkBreakdown(stat.breakdown),
+        drinkBreakdown:
+          user && memberId === user.id ? stat.breakdown : undefined,
       };
     });
-  }, [dayLogs, sortedMemberIds]);
+  }, [dayLogs, sortedMemberIds, user]);
 
   const todayYmd = formatLocalYmd(new Date());
   const canRecord =
@@ -481,9 +481,9 @@ export default function DayLogPage() {
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   ¥{entry.amount.toLocaleString()}
                 </p>
-                {entry.count > 0 && (
+                {entry.drinkBreakdown && entry.count > 0 && (
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                    {entry.breakdownText}
+                    <DrinkBreakdownInline breakdown={entry.drinkBreakdown} />
                   </p>
                 )}
               </div>
