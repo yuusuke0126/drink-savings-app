@@ -30,6 +30,11 @@ function formatMonthInput(date: Date) {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}`;
 }
 
+/** Native month pickers can desync from React (reset/clear often skips change). */
+function normalizeMonthFieldValue(raw: string) {
+  return raw === "" ? formatMonthInput(new Date()) : raw;
+}
+
 export default function AnalyticsPage() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
@@ -247,7 +252,28 @@ export default function AnalyticsPage() {
               <input
                 type="month"
                 value={monthInput}
-                onChange={(event) => setMonthInput(event.target.value)}
+                onChange={(event) =>
+                  setMonthInput(normalizeMonthFieldValue(event.target.value))
+                }
+                onInput={(event) =>
+                  setMonthInput(
+                    normalizeMonthFieldValue(event.currentTarget.value),
+                  )
+                }
+                onBlur={(event) => {
+                  const next = normalizeMonthFieldValue(
+                    event.currentTarget.value,
+                  );
+                  setMonthInput((prev) => (next !== prev ? next : prev));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  const el = event.currentTarget;
+                  requestAnimationFrame(() => {
+                    const next = normalizeMonthFieldValue(el.value);
+                    setMonthInput((prev) => (next !== prev ? next : prev));
+                  });
+                }}
                 className={`min-h-0 min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 ${ANALYTICS_FILTER_TEXT_CLASS} outline-none [color-scheme:light] focus:outline-none focus:ring-0 dark:[color-scheme:dark]`}
               />
             </div>
