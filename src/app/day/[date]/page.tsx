@@ -5,29 +5,32 @@ import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { DrinkBreakdownInline } from "@/components/DrinkBreakdownInline";
+import { useToastAutoDismiss } from "@/hooks/useToastAutoDismiss";
+import { aggregateDrinkLogsByUser } from "@/lib/drinkAggregation";
 import { getSupabaseClient } from "@/lib/supabase";
 import {
-  DRINK_ORDER,
+  createZeroDrinkBreakdownMap,
+  DRINK_LOG_SELECT_COLUMNS,
   DRINKS,
   DRINK_INPUT_TILE_ACCENT_CLASS,
   DRINK_INPUT_TILE_ICON_SRC,
   type DrinkLog,
   type DrinkType,
+  type HouseholdUserProfile,
   formatHistoryDate,
   formatLocalYmd,
   getDrinkDisplayName,
   isErrorMessage,
-  MEMBER_COLOR_CLASSES,
   OUTLINE_BUTTON_CLASS,
   SECTION_CARD_CLASS,
   SAVINGS_PER_DRINK,
 } from "@/lib/drinkShared";
-
-type UserProfile = {
-  user_id: string;
-  default_household_id: string | null;
-  display_name: string | null;
-};
+import {
+  buildMemberColorClassMap,
+  formatMemberDisplayLabel,
+  sortMemberIdsSelfFirst,
+  unionUserIdsForProfileFetch,
+} from "@/lib/householdDisplay";
 
 function parseRouteDate(raw: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
@@ -52,7 +55,9 @@ export default function DayLogPage() {
   const [user, setUser] = useState<User | null>(null);
   const [householdId, setHouseholdId] = useState("");
   const [householdMemberIds, setHouseholdMemberIds] = useState<string[]>([]);
-  const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
+  const [profileMap, setProfileMap] = useState<
+    Record<string, HouseholdUserProfile>
+  >({});
   const [dayLogs, setDayLogs] = useState<DrinkLog[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,9 +140,7 @@ export default function DayLogPage() {
     const fetchDay = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select(
-          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-        )
+        .select(DRINK_LOG_SELECT_COLUMNS)
         .eq("household_id", householdId)
         .eq("drank_on", dateKey)
         .order("created_at", { ascending: false });
@@ -157,10 +160,9 @@ export default function DayLogPage() {
     if (householdMemberIds.length === 0 && dayLogs.length === 0) return;
 
     const loadProfiles = async () => {
-      const userIds = Array.from(
-        new Set([...householdMemberIds, ...dayLogs.map((l) => l.user_id)]),
-      );
-      if (!userIds.includes(user.id)) userIds.push(user.id);
+      const userIds = unionUserIdsForProfileFetch(user.id, householdMemberIds, [
+        dayLogs,
+      ]);
       if (userIds.length === 0) return;
 
       const { data, error } = await supabase
@@ -173,8 +175,8 @@ export default function DayLogPage() {
         return;
       }
 
-      const nextMap: Record<string, UserProfile> = {};
-      for (const profile of (data as UserProfile[]) ?? []) {
+      const nextMap: Record<string, HouseholdUserProfile> = {};
+      for (const profile of (data as HouseholdUserProfile[]) ?? []) {
         nextMap[profile.user_id] = profile;
       }
       setProfileMap(nextMap);
@@ -183,77 +185,29 @@ export default function DayLogPage() {
     void loadProfiles();
   }, [dateKey, dayLogs, householdId, householdMemberIds, supabase, user]);
 
-  useEffect(() => {
-    if (!message) return;
-    if (isErrorMessage(message)) return;
-    const timeoutId = window.setTimeout(() => {
-      setMessage("");
-    }, 2800);
-    return () => window.clearTimeout(timeoutId);
-  }, [message]);
+  useToastAutoDismiss(message, setMessage);
 
-  const sortedMemberIds = useMemo(() => {
-    const ids = Array.from(
-      new Set([...householdMemberIds, ...dayLogs.map((log) => log.user_id)]),
-    );
-    if (user?.id && !ids.includes(user.id)) ids.push(user.id);
-    return ids.sort((a, b) => {
-      if (!user) return a.localeCompare(b);
-      if (a === user.id) return -1;
-      if (b === user.id) return 1;
-      return a.localeCompare(b);
-    });
-  }, [dayLogs, householdMemberIds, user]);
+  const sortedMemberIds = useMemo(
+    () =>
+      sortMemberIdsSelfFirst(
+        householdMemberIds,
+        dayLogs.map((log) => log.user_id),
+        user?.id,
+      ),
+    [dayLogs, householdMemberIds, user?.id],
+  );
 
-  const memberColorMap = useMemo(() => {
-    const colorMap = new Map<string, string>();
-    sortedMemberIds.forEach((memberId, index) => {
-      colorMap.set(
-        memberId,
-        MEMBER_COLOR_CLASSES[index % MEMBER_COLOR_CLASSES.length],
-      );
-    });
-    return colorMap;
-  }, [sortedMemberIds]);
+  const memberColorMap = useMemo(
+    () => buildMemberColorClassMap(sortedMemberIds),
+    [sortedMemberIds],
+  );
 
   const dayStats = useMemo(() => {
-    const createEmptyBreakdown = () => {
-      const breakdown = new Map<DrinkType, number>();
-      DRINKS.forEach((drink) => {
-        breakdown.set(drink.key, 0);
-      });
-      return breakdown;
-    };
-
-    const map = new Map<
-      string,
-      { count: number; breakdown: Map<DrinkType, number> }
-    >();
-
-    for (const memberId of sortedMemberIds) {
-      map.set(memberId, { count: 0, breakdown: createEmptyBreakdown() });
-    }
-
-    for (const log of dayLogs) {
-      const stat = map.get(log.user_id) ?? {
-        count: 0,
-        breakdown: createEmptyBreakdown(),
-      };
-      const drinkType = log.drink_type as DrinkType;
-      stat.count += 1;
-      if (DRINK_ORDER.has(drinkType)) {
-        stat.breakdown.set(
-          drinkType,
-          (stat.breakdown.get(drinkType) ?? 0) + 1,
-        );
-      }
-      map.set(log.user_id, stat);
-    }
-
+    const byUser = aggregateDrinkLogsByUser(dayLogs, sortedMemberIds);
     return sortedMemberIds.map((memberId) => {
-      const stat = map.get(memberId) ?? {
+      const stat = byUser.get(memberId) ?? {
         count: 0,
-        breakdown: createEmptyBreakdown(),
+        breakdown: createZeroDrinkBreakdownMap(),
       };
       return {
         memberId,
@@ -268,16 +222,6 @@ export default function DayLogPage() {
   const todayYmd = formatLocalYmd(new Date());
   const canRecord =
     dateKey != null && Boolean(householdId) && dateKey <= todayYmd;
-
-  const formatMemberName = (memberUserId: string) => {
-    const configuredName = profileMap[memberUserId]?.display_name?.trim();
-    if (memberUserId === user?.id) {
-      if (configuredName) return `自分 (${configuredName})`;
-      return "自分";
-    }
-    if (configuredName) return configuredName;
-    return `メンバー (${memberUserId.slice(0, 8)})`;
-  };
 
   const handleAddDrink = async (
     drinkType: DrinkType,
@@ -312,9 +256,7 @@ export default function DayLogPage() {
     const { data, error } = await supabase
       .from("drink_logs")
       .insert(payload)
-      .select(
-        "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-      )
+      .select(DRINK_LOG_SELECT_COLUMNS)
       .single();
 
     if (error) {
@@ -488,7 +430,13 @@ export default function DayLogPage() {
                 className="rounded-lg border border-blue-100 bg-white/80 p-3 dark:border-blue-900/40 dark:bg-slate-800/60"
               >
                 <p className="flex items-center gap-1 text-xs font-semibold text-blue-700 dark:text-blue-200">
-                  <span>{formatMemberName(entry.memberId)}</span>
+                  <span>
+                    {formatMemberDisplayLabel(
+                      entry.memberId,
+                      profileMap,
+                      user.id,
+                    )}
+                  </span>
                   <span
                     className={`h-2 w-2 rounded-full ${memberColorMap.get(entry.memberId) ?? "bg-slate-400"}`}
                   />

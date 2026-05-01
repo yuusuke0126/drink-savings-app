@@ -6,79 +6,45 @@ import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 import { DrinkBreakdownInline } from "@/components/DrinkBreakdownInline";
 import { DrinkGlyph } from "@/components/DrinkGlyph";
+import { useToastAutoDismiss } from "@/hooks/useToastAutoDismiss";
+import {
+  aggregateDrinkLogsByUser,
+  buildCalendarGridCells,
+  buildCalendarSortedMarkersByDate,
+  computeSelectedDayMemberStats,
+} from "@/lib/drinkAggregation";
 import {
   CHIP_BUTTON_CLASS,
-  DRINK_ORDER,
+  DRINK_LOG_SELECT_COLUMNS,
   DRINKS,
   DRINK_INPUT_TILE_ACCENT_CLASS,
   DRINK_INPUT_TILE_ICON_SRC,
   type DrinkLog,
   type DrinkType,
+  type HouseholdUserProfile,
   drankOnDiffersFromRegisteredDay,
+  formatCalendarDayKey,
   formatDrankOnLabel,
   formatHistoryDate,
   formatLocalYmd,
   formatLogRegisteredAt,
   getDrinkDisplayName,
   isErrorMessage,
+  JAPANESE_WEEKDAY_LABELS,
   logInCalendarMonth,
-  MEMBER_COLOR_CLASSES,
   OUTLINE_BUTTON_CLASS,
   SECTION_CARD_CLASS,
   SAVINGS_PER_DRINK,
 } from "@/lib/drinkShared";
-
-type UserProfile = {
-  user_id: string;
-  default_household_id: string | null;
-  display_name: string | null;
-};
-
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+import {
+  buildMemberColorClassMap,
+  formatMemberDisplayLabel,
+  sortMemberIdsSelfFirst,
+  unionUserIdsForProfileFetch,
+} from "@/lib/householdDisplay";
 
 /** First scope: at most this many "other" members on the right (excluding self). */
 const MAX_OTHER_MEMBERS_IN_SUMMARY = 2;
-
-function aggregateLogsByUser(
-  logs: DrinkLog[],
-  memberIds: string[],
-): Map<
-  string,
-  { count: number; breakdown: Map<DrinkType, number> }
-> {
-  const createEmptyBreakdown = () => {
-    const breakdown = new Map<DrinkType, number>();
-    DRINKS.forEach((drink) => {
-      breakdown.set(drink.key, 0);
-    });
-    return breakdown;
-  };
-
-  const map = new Map<
-    string,
-    { count: number; breakdown: Map<DrinkType, number> }
-  >();
-  for (const memberId of memberIds) {
-    map.set(memberId, { count: 0, breakdown: createEmptyBreakdown() });
-  }
-
-  for (const log of logs) {
-    const stat = map.get(log.user_id) ?? {
-      count: 0,
-      breakdown: createEmptyBreakdown(),
-    };
-    const drinkType = log.drink_type as DrinkType;
-    stat.count += 1;
-    if (DRINK_ORDER.has(drinkType)) {
-      stat.breakdown.set(
-        drinkType,
-        (stat.breakdown.get(drinkType) ?? 0) + 1,
-      );
-    }
-    map.set(log.user_id, stat);
-  }
-  return map;
-}
 
 export default function Home() {
   const supabase = getSupabaseClient();
@@ -97,7 +63,9 @@ export default function Home() {
   const [householdMemberIds, setHouseholdMemberIds] = useState<string[]>([]);
   const [isHouseholdSettingsOpen, setIsHouseholdSettingsOpen] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState("");
-  const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
+  const [profileMap, setProfileMap] = useState<
+    Record<string, HouseholdUserProfile>
+  >({});
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState("");
   const [message, setMessage] = useState(
@@ -136,9 +104,7 @@ export default function Home() {
     const fetchLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select(
-          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-        )
+        .select(DRINK_LOG_SELECT_COLUMNS)
         .eq("household_id", householdId)
         .order("created_at", { ascending: false })
         .limit(10);
@@ -161,9 +127,7 @@ export default function Home() {
     const fetchTodayLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select(
-          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-        )
+        .select(DRINK_LOG_SELECT_COLUMNS)
         .eq("household_id", householdId)
         .eq("drank_on", todayStr)
         .order("created_at", { ascending: false });
@@ -193,9 +157,7 @@ export default function Home() {
     const fetchMonthLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select(
-          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-        )
+        .select(DRINK_LOG_SELECT_COLUMNS)
         .eq("household_id", householdId)
         .gte("drank_on", monthStartStr)
         .lt("drank_on", monthEndStr)
@@ -247,14 +209,7 @@ export default function Home() {
     void fetchHouseholdMembers();
   }, [householdId, supabase, user]);
 
-  useEffect(() => {
-    if (!message) return;
-    if (isErrorMessage(message)) return;
-    const timeoutId = window.setTimeout(() => {
-      setMessage("");
-    }, 2800);
-    return () => window.clearTimeout(timeoutId);
-  }, [message]);
+  useToastAutoDismiss(message, setMessage);
 
   useEffect(() => {
     if (!supabase || !user) return;
@@ -286,15 +241,11 @@ export default function Home() {
     if (!supabase || !user || !householdId) return;
 
     const loadVisibleProfiles = async () => {
-      const userIds = Array.from(
-        new Set([
-          ...householdMemberIds,
-          ...logs.map((log) => log.user_id),
-          ...todayLogs.map((log) => log.user_id),
-          ...monthLogs.map((log) => log.user_id),
-        ]),
-      );
-      if (!userIds.includes(user.id)) userIds.push(user.id);
+      const userIds = unionUserIdsForProfileFetch(user.id, householdMemberIds, [
+        logs,
+        todayLogs,
+        monthLogs,
+      ]);
       if (userIds.length === 0) return;
 
       const { data, error } = await supabase
@@ -307,8 +258,8 @@ export default function Home() {
         return;
       }
 
-      const nextMap: Record<string, UserProfile> = {};
-      for (const profile of (data as UserProfile[]) ?? []) {
+      const nextMap: Record<string, HouseholdUserProfile> = {};
+      for (const profile of (data as HouseholdUserProfile[]) ?? []) {
         nextMap[profile.user_id] = profile;
       }
       setProfileMap(nextMap);
@@ -345,22 +296,15 @@ export default function Home() {
     [],
   );
 
-  const sortedMemberIds = useMemo(() => {
-    const ids = Array.from(
-      new Set([
-        ...householdMemberIds,
-        ...monthLogs.map((log) => log.user_id),
-        ...todayLogs.map((log) => log.user_id),
-      ]),
-    );
-    if (user?.id && !ids.includes(user.id)) ids.push(user.id);
-    return ids.sort((a, b) => {
-      if (!user) return a.localeCompare(b);
-      if (a === user.id) return -1;
-      if (b === user.id) return 1;
-      return a.localeCompare(b);
-    });
-  }, [householdMemberIds, monthLogs, todayLogs, user]);
+  const sortedMemberIds = useMemo(
+    () =>
+      sortMemberIdsSelfFirst(
+        householdMemberIds,
+        [...monthLogs, ...todayLogs].map((log) => log.user_id),
+        user?.id,
+      ),
+    [householdMemberIds, monthLogs, todayLogs, user?.id],
+  );
 
   const summaryMemberIds = useMemo(() => {
     if (!user) return sortedMemberIds;
@@ -371,60 +315,39 @@ export default function Home() {
     return [user.id, ...others];
   }, [householdMemberIds, sortedMemberIds, user]);
 
+  const otherSummaryMemberIds = useMemo(() => {
+    if (!user) return [];
+    return summaryMemberIds.filter((id) => id !== user.id);
+  }, [summaryMemberIds, user]);
+
   const todayBandStats = useMemo(
-    () => aggregateLogsByUser(todayLogs, summaryMemberIds),
+    () => aggregateDrinkLogsByUser(todayLogs, summaryMemberIds),
     [summaryMemberIds, todayLogs],
   );
 
   const monthBandStats = useMemo(
-    () => aggregateLogsByUser(monthLogs, summaryMemberIds),
+    () => aggregateDrinkLogsByUser(monthLogs, summaryMemberIds),
     [monthLogs, summaryMemberIds],
   );
 
-  const memberColorMap = useMemo(() => {
-    const colorMap = new Map<string, string>();
-    sortedMemberIds.forEach((memberId, index) => {
-      colorMap.set(memberId, MEMBER_COLOR_CLASSES[index % MEMBER_COLOR_CLASSES.length]);
-    });
-    return colorMap;
-  }, [sortedMemberIds]);
+  const memberColorMap = useMemo(
+    () => buildMemberColorClassMap(sortedMemberIds),
+    [sortedMemberIds],
+  );
 
-  const calendarDateMarkers = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const log of monthLogs) {
-      const key = log.drank_on;
-      const current = map.get(key) ?? new Set<string>();
-      current.add(log.user_id);
-      map.set(key, current);
-    }
+  const calendarDateMarkers = useMemo(
+    () => buildCalendarSortedMarkersByDate(monthLogs, sortedMemberIds),
+    [monthLogs, sortedMemberIds],
+  );
 
-    const sortedMap = new Map<string, string[]>();
-    for (const [key, memberSet] of map.entries()) {
-      const ids = Array.from(memberSet);
-      ids.sort((a, b) => {
-        const ai = sortedMemberIds.indexOf(a);
-        const bi = sortedMemberIds.indexOf(b);
-        if (ai === -1 && bi === -1) return a.localeCompare(b);
-        if (ai === -1) return 1;
-        if (bi === -1) return -1;
-        return ai - bi;
-      });
-      sortedMap.set(key, ids);
-    }
-    return sortedMap;
-  }, [monthLogs, sortedMemberIds]);
-
-  const calendarGrid = useMemo(() => {
-    const year = displayMonthDate.getFullYear();
-    const month = displayMonthDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells: Array<number | null> = [];
-    for (let i = 0; i < firstDay; i += 1) cells.push(null);
-    for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
-    while (cells.length % 7 !== 0) cells.push(null);
-    return cells;
-  }, [displayMonthDate]);
+  const calendarGrid = useMemo(
+    () =>
+      buildCalendarGridCells(
+        displayMonthDate.getFullYear(),
+        displayMonthDate.getMonth(),
+      ),
+    [displayMonthDate],
+  );
 
   const defaultCalendarDateKey = useMemo(
     () => formatLocalYmd(displayMonthDate),
@@ -439,57 +362,20 @@ export default function Home() {
     return defaultCalendarDateKey;
   }, [defaultCalendarDateKey, displayMonthDate, selectedCalendarDate]);
 
-  const selectedDayStats = useMemo(() => {
-    if (sortedMemberIds.length === 0) return [];
-
-    const countMap = new Map<string, number>();
-    const breakdownMap = new Map<string, Map<DrinkType, number>>();
-    for (const memberId of sortedMemberIds) {
-      countMap.set(memberId, 0);
-      const memberDrinkMap = new Map<DrinkType, number>();
-      DRINKS.forEach((drink) => {
-        memberDrinkMap.set(drink.key, 0);
-      });
-      breakdownMap.set(memberId, memberDrinkMap);
-    }
-
-    for (const log of monthLogs) {
-      if (log.drank_on !== activeCalendarDateKey) continue;
-      if (!countMap.has(log.user_id)) continue;
-      countMap.set(log.user_id, (countMap.get(log.user_id) ?? 0) + 1);
-      const memberDrinkMap = breakdownMap.get(log.user_id);
-      if (!memberDrinkMap) continue;
-      const drinkType = log.drink_type as DrinkType;
-      if (!DRINK_ORDER.has(drinkType)) continue;
-      memberDrinkMap.set(drinkType, (memberDrinkMap.get(drinkType) ?? 0) + 1);
-    }
-
-    return sortedMemberIds.map((memberId) => {
-      const count = countMap.get(memberId) ?? 0;
-      const memberDrinkMap = breakdownMap.get(memberId) ?? new Map<DrinkType, number>();
-
-      return {
-        memberId,
-        count,
-        amount: count * SAVINGS_PER_DRINK,
-        drinkBreakdown:
-          user && memberId === user.id ? memberDrinkMap : undefined,
-      };
-    });
-  }, [activeCalendarDateKey, monthLogs, sortedMemberIds, user]);
+  const selectedDayStats = useMemo(
+    () =>
+      computeSelectedDayMemberStats({
+        monthLogs,
+        activeCalendarDateKey,
+        sortedMemberIds,
+        selfUserId: user?.id,
+        savingsPerDrink: SAVINGS_PER_DRINK,
+      }),
+    [activeCalendarDateKey, monthLogs, sortedMemberIds, user?.id],
+  );
 
   const isMonthNextDisabled = monthOffset >= 0;
   const isMonthResetDisabled = monthOffset === 0;
-
-  const formatMemberName = (memberUserId: string) => {
-    const configuredName = profileMap[memberUserId]?.display_name?.trim();
-    if (memberUserId === user?.id) {
-      if (configuredName) return `自分 (${configuredName})`;
-      return "自分";
-    }
-    if (configuredName) return configuredName;
-    return `メンバー (${memberUserId.slice(0, 8)})`;
-  };
 
   const handleSignIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -550,9 +436,7 @@ export default function Home() {
     const { data, error } = await supabase
       .from("drink_logs")
       .insert(payload)
-      .select(
-        "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-      )
+      .select(DRINK_LOG_SELECT_COLUMNS)
       .single();
 
     if (error) {
@@ -876,7 +760,7 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-2 items-stretch">
                   <div className="min-w-0 flex flex-col rounded-lg border border-blue-100 bg-white/80 p-2 dark:border-blue-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-blue-700 dark:text-blue-200">
-                      {formatMemberName(user.id)}
+                      {formatMemberDisplayLabel(user.id, profileMap, user.id)}
                     </p>
                     <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
                       {(todayBandStats.get(user.id)?.count ?? 0)}杯
@@ -896,15 +780,12 @@ export default function Home() {
                     )}
                   </div>
                   <div className="min-w-0 flex flex-col gap-1.5">
-                    {summaryMemberIds.filter((id) => id !== user.id).length ===
-                      0 && (
+                    {otherSummaryMemberIds.length === 0 && (
                       <div className="flex min-h-[3.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-blue-200/80 bg-white/40 px-1 py-2 text-center text-[11px] leading-snug text-slate-500 dark:border-blue-900/50 dark:bg-slate-800/40 dark:text-slate-400">
                         他メンバーがいません
                       </div>
                     )}
-                    {summaryMemberIds
-                      .filter((id) => id !== user.id)
-                      .map((oid) => {
+                    {otherSummaryMemberIds.map((oid) => {
                         const st = todayBandStats.get(oid) ?? {
                           count: 0,
                           breakdown: new Map<DrinkType, number>(),
@@ -915,7 +796,7 @@ export default function Home() {
                             className="rounded-lg border border-blue-100/70 bg-white/60 p-2 dark:border-blue-900/30 dark:bg-slate-800/50"
                           >
                             <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                              {formatMemberName(oid)}
+                              {formatMemberDisplayLabel(oid, profileMap, user.id)}
                             </p>
                             <p className="text-xl font-semibold text-slate-700 dark:text-slate-200">
                               {st.count}杯
@@ -925,7 +806,7 @@ export default function Home() {
                             </p>
                           </div>
                         );
-                      })}
+                    })}
                   </div>
                 </div>
               )}
@@ -940,7 +821,7 @@ export default function Home() {
                 <div className="mb-2 grid grid-cols-2 gap-2 items-stretch">
                   <div className="min-w-0 flex flex-col rounded-lg border border-indigo-100 bg-white/80 p-2 dark:border-indigo-900/40 dark:bg-slate-800/60">
                     <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-200">
-                      {formatMemberName(user.id)}
+                      {formatMemberDisplayLabel(user.id, profileMap, user.id)}
                     </p>
                     <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
                       {(monthBandStats.get(user.id)?.count ?? 0)}杯
@@ -960,15 +841,12 @@ export default function Home() {
                     )}
                   </div>
                   <div className="min-w-0 flex flex-col gap-1.5">
-                    {summaryMemberIds.filter((id) => id !== user.id).length ===
-                      0 && (
+                    {otherSummaryMemberIds.length === 0 && (
                       <div className="flex min-h-[3.5rem] flex-1 items-center justify-center rounded-lg border border-dashed border-indigo-200/80 bg-white/40 px-1 py-2 text-center text-[11px] leading-snug text-slate-500 dark:border-indigo-900/50 dark:bg-slate-800/40 dark:text-slate-400">
                         他メンバーがいません
                       </div>
                     )}
-                    {summaryMemberIds
-                      .filter((id) => id !== user.id)
-                      .map((oid) => {
+                    {otherSummaryMemberIds.map((oid) => {
                         const st = monthBandStats.get(oid) ?? {
                           count: 0,
                           breakdown: new Map<DrinkType, number>(),
@@ -979,7 +857,7 @@ export default function Home() {
                             className="rounded-lg border border-indigo-100/70 bg-white/60 p-2 dark:border-indigo-900/30 dark:bg-slate-800/50"
                           >
                             <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                              {formatMemberName(oid)}
+                              {formatMemberDisplayLabel(oid, profileMap, user.id)}
                             </p>
                             <p className="text-xl font-semibold text-slate-700 dark:text-slate-200">
                               {st.count}杯
@@ -989,7 +867,7 @@ export default function Home() {
                             </p>
                           </div>
                         );
-                      })}
+                    })}
                   </div>
                 </div>
               )}
@@ -1027,7 +905,7 @@ export default function Home() {
                   </button>
                 </div>
                 <div className="mb-1.5 grid grid-cols-7 gap-1 text-center text-xs text-slate-600 dark:text-slate-300">
-                  {WEEKDAY_LABELS.map((label) => (
+                  {JAPANESE_WEEKDAY_LABELS.map((label) => (
                     <div key={label} className="py-1 font-medium">
                       {label}
                     </div>
@@ -1038,7 +916,11 @@ export default function Home() {
                     if (!day) {
                       return <div key={`empty-${index}`} className="h-12 rounded-md" />;
                     }
-                    const dateKey = `${displayMonthDate.getFullYear()}-${`${displayMonthDate.getMonth() + 1}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+                    const dateKey = formatCalendarDayKey(
+                      displayMonthDate.getFullYear(),
+                      displayMonthDate.getMonth(),
+                      day,
+                    );
                     const marker = calendarDateMarkers.get(dateKey);
                     const isSelected = dateKey === activeCalendarDateKey;
                     return (
@@ -1085,7 +967,13 @@ export default function Home() {
                           className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800"
                         >
                           <p className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                            <span>{formatMemberName(entry.memberId)}</span>
+                            <span>
+                              {formatMemberDisplayLabel(
+                                entry.memberId,
+                                profileMap,
+                                user.id,
+                              )}
+                            </span>
                             <span
                               className={`h-2 w-2 rounded-full ${memberColorMap.get(entry.memberId) ?? "bg-slate-400"}`}
                             />
@@ -1156,7 +1044,12 @@ export default function Home() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 text-sm text-gray-800 dark:text-gray-100">
                       <DrinkGlyph drinkType={log.drink_type} />{" "}
-                      {formatMemberName(log.user_id)} ·{" "}
+                      {formatMemberDisplayLabel(
+                        log.user_id,
+                        profileMap,
+                        user.id,
+                      )}{" "}
+                      ·{" "}
                       {formatLogRegisteredAt(log.created_at)}
                       {drankOnDiffersFromRegisteredDay(
                         log.drank_on,

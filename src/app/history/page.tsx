@@ -4,41 +4,29 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { DrinkGlyph } from "@/components/DrinkGlyph";
+import { useToastAutoDismiss } from "@/hooks/useToastAutoDismiss";
 import {
+  DRINK_LOG_SELECT_COLUMNS,
+  type DrinkLog,
+  type HouseholdUserProfile,
   drankOnDiffersFromRegisteredDay,
   formatDrankOnLabel,
   formatLogRegisteredAt,
+  isErrorMessage,
 } from "@/lib/drinkShared";
+import { formatMemberDisplayLabel } from "@/lib/householdDisplay";
 import { getSupabaseClient } from "@/lib/supabase";
 
-type DrinkLog = {
-  id: string;
-  user_id: string;
-  household_id: string;
-  drink_type: string;
-  custom_drink_name: string | null;
-  drank_on: string;
-  created_at: string;
-};
-
-type UserProfile = {
-  user_id: string;
-  default_household_id: string | null;
-  display_name: string | null;
-};
-
 const PAGE_SIZE = 20;
-
-function isErrorMessage(text: string) {
-  return text.includes("失敗") || text.includes("エラー");
-}
 
 export default function HistoryPage() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
   const [householdId, setHouseholdId] = useState("");
   const [logs, setLogs] = useState<DrinkLog[]>([]);
-  const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
+  const [profileMap, setProfileMap] = useState<
+    Record<string, HouseholdUserProfile>
+  >({});
   const [pageIndex, setPageIndex] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
@@ -98,9 +86,7 @@ export default function HistoryPage() {
         await Promise.all([
           supabase
             .from("drink_logs")
-            .select(
-              "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-            )
+            .select(DRINK_LOG_SELECT_COLUMNS)
             .eq("household_id", householdId)
             .order("created_at", { ascending: false })
             .range(from, to),
@@ -144,8 +130,8 @@ export default function HistoryPage() {
         return;
       }
 
-      const nextMap: Record<string, UserProfile> = {};
-      for (const profile of (data as UserProfile[]) ?? []) {
+      const nextMap: Record<string, HouseholdUserProfile> = {};
+      for (const profile of (data as HouseholdUserProfile[]) ?? []) {
         nextMap[profile.user_id] = profile;
       }
       setProfileMap(nextMap);
@@ -154,29 +140,12 @@ export default function HistoryPage() {
     void loadProfiles();
   }, [householdId, logs, supabase, user]);
 
-  useEffect(() => {
-    if (!message) return;
-    if (isErrorMessage(message)) return;
-    const timeoutId = window.setTimeout(() => {
-      setMessage("");
-    }, 2800);
-    return () => window.clearTimeout(timeoutId);
-  }, [message]);
+  useToastAutoDismiss(message, setMessage);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
     [totalCount],
   );
-
-  const formatMemberName = (memberUserId: string) => {
-    const configuredName = profileMap[memberUserId]?.display_name?.trim();
-    if (memberUserId === user?.id) {
-      if (configuredName) return `自分 (${configuredName})`;
-      return "自分";
-    }
-    if (configuredName) return configuredName;
-    return `メンバー (${memberUserId.slice(0, 8)})`;
-  };
 
   const handleDeleteLog = async (log: DrinkLog) => {
     if (!supabase) return;
@@ -286,7 +255,12 @@ export default function HistoryPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 text-sm text-gray-800 dark:text-gray-100">
                   <DrinkGlyph drinkType={log.drink_type} />{" "}
-                  {formatMemberName(log.user_id)} ·{" "}
+                  {formatMemberDisplayLabel(
+                    log.user_id,
+                    profileMap,
+                    user.id,
+                  )}{" "}
+                  ·{" "}
                   {formatLogRegisteredAt(log.created_at)}
                   {drankOnDiffersFromRegisteredDay(
                     log.drank_on,

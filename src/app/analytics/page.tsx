@@ -4,46 +4,27 @@ import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { DrinkGlyph } from "@/components/DrinkGlyph";
+import { useToastAutoDismiss } from "@/hooks/useToastAutoDismiss";
+import {
+  DRINK_LOG_SELECT_COLUMNS,
+  type DrinkLog,
+  type DrinkType,
+  type HouseholdUserProfile,
+  getDrinkDisplayName,
+  isErrorMessage,
+  SAVINGS_PER_DRINK,
+} from "@/lib/drinkShared";
+import {
+  formatMemberDisplayLabel,
+  sortMemberIdsSelfFirst,
+} from "@/lib/householdDisplay";
 import { getSupabaseClient } from "@/lib/supabase";
-
-type DrinkLog = {
-  id: string;
-  user_id: string;
-  household_id: string;
-  drink_type: string;
-  custom_drink_name: string | null;
-  drank_on: string;
-  created_at: string;
-};
-
-type UserProfile = {
-  user_id: string;
-  display_name: string | null;
-};
-
-const SAVINGS_PER_DRINK = 500;
 
 /** Shared outer box for filter row controls (must match select and month visually). */
 const ANALYTICS_FILTER_BOX_CLASS =
   "box-border h-10 w-full min-w-0 max-w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-800";
 const ANALYTICS_FILTER_TEXT_CLASS =
   "text-sm leading-5 text-slate-800 dark:text-slate-100";
-
-function isErrorMessage(text: string) {
-  return text.includes("失敗") || text.includes("エラー");
-}
-
-function getDrinkLabel(drinkType: string) {
-  const labelMap: Record<string, string> = {
-    beer: "ビール",
-    whisky: "ウイスキー",
-    wine: "ワイン",
-    sake: "日本酒",
-    shochu: "焼酎",
-    other: "その他",
-  };
-  return labelMap[drinkType] ?? drinkType;
-}
 
 function formatMonthInput(date: Date) {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}`;
@@ -56,7 +37,9 @@ export default function AnalyticsPage() {
   const [monthInput, setMonthInput] = useState(formatMonthInput(new Date()));
   const [selectedUserId, setSelectedUserId] = useState("");
   const [monthLogs, setMonthLogs] = useState<DrinkLog[]>([]);
-  const [profileMap, setProfileMap] = useState<Record<string, UserProfile>>({});
+  const [profileMap, setProfileMap] = useState<
+    Record<string, HouseholdUserProfile>
+  >({});
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [message, setMessage] = useState("");
 
@@ -117,9 +100,7 @@ export default function AnalyticsPage() {
     const loadMonthLogs = async () => {
       const { data, error } = await supabase
         .from("drink_logs")
-        .select(
-          "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at",
-        )
+        .select(DRINK_LOG_SELECT_COLUMNS)
         .eq("household_id", householdId)
         .gte("drank_on", monthStartStr)
         .lt("drank_on", monthEndStr)
@@ -151,9 +132,14 @@ export default function AnalyticsPage() {
         setMessage(`表示名取得エラー: ${error.message}`);
         return;
       }
-      const nextMap: Record<string, UserProfile> = {};
-      for (const profile of (data as UserProfile[]) ?? []) {
-        nextMap[profile.user_id] = profile;
+      const nextMap: Record<string, HouseholdUserProfile> = {};
+      for (const profile of (data as { user_id: string; display_name: string | null }[]) ??
+        []) {
+        nextMap[profile.user_id] = {
+          user_id: profile.user_id,
+          display_name: profile.display_name,
+          default_household_id: null,
+        };
       }
       setProfileMap(nextMap);
     };
@@ -161,35 +147,17 @@ export default function AnalyticsPage() {
     void loadProfiles();
   }, [householdId, monthLogs, supabase, user]);
 
-  useEffect(() => {
-    if (!message) return;
-    if (isErrorMessage(message)) return;
-    const timeoutId = window.setTimeout(() => {
-      setMessage("");
-    }, 2800);
-    return () => window.clearTimeout(timeoutId);
-  }, [message]);
+  useToastAutoDismiss(message, setMessage);
 
-  const memberOptions = useMemo(() => {
-    const userIds = Array.from(new Set(monthLogs.map((log) => log.user_id)));
-    if (user?.id && !userIds.includes(user.id)) userIds.unshift(user.id);
-    return userIds.sort((a, b) => {
-      if (!user) return a.localeCompare(b);
-      if (a === user.id) return -1;
-      if (b === user.id) return 1;
-      return a.localeCompare(b);
-    });
-  }, [monthLogs, user]);
-
-  const formatMemberName = (memberUserId: string) => {
-    const configuredName = profileMap[memberUserId]?.display_name?.trim();
-    if (memberUserId === user?.id) {
-      if (configuredName) return `自分 (${configuredName})`;
-      return "自分";
-    }
-    if (configuredName) return configuredName;
-    return `メンバー (${memberUserId.slice(0, 8)})`;
-  };
+  const memberOptions = useMemo(
+    () =>
+      sortMemberIdsSelfFirst(
+        [],
+        monthLogs.map((log) => log.user_id),
+        user?.id,
+      ),
+    [monthLogs, user?.id],
+  );
 
   const selectedUserLogs = useMemo(
     () => monthLogs.filter((log) => log.user_id === selectedUserId),
@@ -260,7 +228,11 @@ export default function AnalyticsPage() {
             >
               {memberOptions.map((memberUserId) => (
                 <option key={memberUserId} value={memberUserId}>
-                  {formatMemberName(memberUserId)}
+                  {formatMemberDisplayLabel(
+                    memberUserId,
+                    profileMap,
+                    user.id,
+                  )}
                 </option>
               ))}
             </select>
@@ -295,7 +267,8 @@ export default function AnalyticsPage() {
                 className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2"
               >
                 <span className="text-sm font-medium text-slate-700">
-                  <DrinkGlyph drinkType={drinkType} /> {getDrinkLabel(drinkType)}
+                  <DrinkGlyph drinkType={drinkType} />{" "}
+                  {getDrinkDisplayName(drinkType as DrinkType)}
                 </span>
                 <span className="text-sm text-slate-700">
                   {count}杯 / ¥{(count * SAVINGS_PER_DRINK).toLocaleString()}

@@ -16,6 +16,46 @@ export type DrinkLog = {
   created_at: string;
 };
 
+/** Supabase `.select()` column list for drink_logs list/insert responses. */
+export const DRINK_LOG_SELECT_COLUMNS =
+  "id,user_id,household_id,drink_type,custom_drink_name,drank_on,created_at";
+
+export type HouseholdUserProfile = {
+  user_id: string;
+  default_household_id: string | null;
+  display_name: string | null;
+};
+
+export const JAPANESE_WEEKDAY_LABELS = [
+  "日",
+  "月",
+  "火",
+  "水",
+  "木",
+  "金",
+  "土",
+] as const;
+
+/** All drink types at zero count (for per-member breakdown maps). */
+export function createZeroDrinkBreakdownMap(): Map<DrinkType, number> {
+  const breakdown = new Map<DrinkType, number>();
+  for (const { key } of DRINKS) {
+    breakdown.set(key, 0);
+  }
+  return breakdown;
+}
+
+/** Build `YYYY-MM-DD` for a day within a calendar month (local). */
+export function formatCalendarDayKey(
+  year: number,
+  monthIndex0: number,
+  day: number,
+): string {
+  const month = `${monthIndex0 + 1}`.padStart(2, "0");
+  const d = `${day}`.padStart(2, "0");
+  return `${year}-${month}-${d}`;
+}
+
 export const DRINKS: { key: DrinkType; label: string }[] = [
   { key: "beer", label: "ビール" },
   { key: "whisky", label: "ウイスキー" },
